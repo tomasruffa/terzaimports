@@ -1,12 +1,11 @@
-# Usar si el servicio Railway apunta a la raíz del repo (sin Root Directory).
-# Recomendado: configurar Root Directory = apps/api en Railway y usar apps/api/railway.toml
+# Fallback si el servicio NO tiene Root Directory = apps/api
+# Recomendado: Root Directory = apps/api (usa apps/api/railway.toml + Dockerfile)
 
 [build]
-builder = "nixpacks"
-buildCommand = "npm install"
+builder = "dockerfile"
+dockerfilePath = "apps/api/Dockerfile"
 
 [deploy]
-startCommand = "npm run start:api"
 healthcheckPath = "/health"
-healthcheckTimeout = 60
+healthcheckTimeout = 120
 restartPolicyType = "ON_FAILURE"

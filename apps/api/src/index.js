@@ -7,6 +7,9 @@ require('dotenv').config({ path: path.resolve(__dirname, '../../../.env') })
 
 const app = express()
 const PORT = Number(process.env.PORT || process.env.API_PORT || 4000)
+const HOST = process.env.HOSTNAME || '::'
+
+console.log(`[startup] PORT=${process.env.PORT ?? '(unset)'} API_PORT=${process.env.API_PORT ?? '(unset)'} → listening on ${HOST}:${PORT}`)
 
 // Healthcheck primero — Railway valida esto antes de marcar el deploy como OK
 app.get('/health', (_req, res) => {
@@ -41,8 +44,8 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ data: null, error: 'Error interno del servidor' })
 })
 
-const server = app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Terza API listening on 0.0.0.0:${PORT}`)
+const server = app.listen(PORT, HOST, () => {
+  console.log(`🚀 Terza API listening on ${HOST}:${PORT}`)
 })
 
 server.on('error', (err) => {

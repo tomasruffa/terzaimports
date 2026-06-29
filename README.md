@@ -39,18 +39,23 @@ El `vercel.json` en `apps/web` instala dependencias desde la raíz del monorepo.
 ### Railway (API)
 
 1. Crear proyecto en [Railway](https://railway.app) desde el mismo repo.
-2. **Root Directory:** `apps/api` (importante — si queda en la raíz, `npm start` intenta levantar Next.js y falla el healthcheck).
-3. Variables de entorno:
+2. **Root Directory:** `apps/api` (obligatorio).
+3. **Builder:** Dockerfile (configurado en `apps/api/railway.toml`).
+4. Variables de entorno:
 
 | Variable | Valor |
 |---|---|
 | `SUPABASE_URL` | URL del proyecto Supabase |
 | `SUPABASE_SERVICE_ROLE_KEY` | Service role key (solo backend) |
 | `ALLOWED_ORIGINS` | Dominio de Vercel, ej. `https://terzaimports.vercel.app` |
+| `HOSTNAME` | `::` (opcional, ya es el default en el código) |
 
-Railway asigna `PORT` automáticamente; no configures `API_PORT` en producción.
+Railway asigna `PORT` automáticamente. **No configures `API_PORT` en producción.**
 
-**Healthcheck:** el deploy debe responder `200` en `GET /health`. Si falla, revisá en Railway → Deployments → Logs que veas `Terza API listening on 0.0.0.0:XXXX`.
+**Si el healthcheck sigue fallando:**
+- En Settings → Networking → **no** configures un puerto fijo distinto de `$PORT`.
+- En Settings → Deploy → Healthcheck Path: `/health` (o dejalo vacío para desactivarlo temporalmente).
+- En Deployments → View logs, buscá `[startup] PORT=...` y `Terza API listening on`.
 
 ### Orden recomendado
 
