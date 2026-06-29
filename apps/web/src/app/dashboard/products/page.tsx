@@ -22,19 +22,10 @@ interface Product {
 
 import { apiFetch } from '@/utils/apiFetch'
 
-const DEMO_PRODUCTS: Product[] = [
-  { id: '1', name: 'Cable USB-C Premium 2m', sku: 'CAB-USBC-2M', category: 'Cables', purchase_price: 3.50, sale_price: 12.99, stock_quantity: 150, min_stock: 20, unit: 'unidad', supplier: 'TechSupply Co.', origin_country: 'China', active: true },
-  { id: '2', name: 'Auriculares Bluetooth TWS', sku: 'AUR-BT-TWS01', category: 'Audio', purchase_price: 18.00, sale_price: 59.99, stock_quantity: 45, min_stock: 10, unit: 'unidad', supplier: 'AudioMax Ltd.', origin_country: 'China', active: true },
-  { id: '3', name: 'Cargador Rápido 65W GaN', sku: 'CAR-GAN-65W', category: 'Cargadores', purchase_price: 12.00, sale_price: 34.99, stock_quantity: 80, min_stock: 15, unit: 'unidad', supplier: 'PowerTech', origin_country: 'China', active: true },
-  { id: '4', name: 'Soporte Celular Auto Magnético', sku: 'SOP-AUTO-MAG', category: 'Accesorios', purchase_price: 4.50, sale_price: 16.99, stock_quantity: 200, min_stock: 30, unit: 'unidad', supplier: 'MountPro', origin_country: 'China', active: true },
-  { id: '5', name: 'Funda Notebook 15"', sku: 'FUN-NB-15', category: 'Bolsos', purchase_price: 8.00, sale_price: 24.99, stock_quantity: 60, min_stock: 10, unit: 'unidad', supplier: 'BagWorld', origin_country: 'Vietnam', active: true },
-]
-
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [isDemo, setIsDemo] = useState(false)
   const [modalOpen, setModalOpen] = useState(false)
   const [editProduct, setEditProduct] = useState<Product | null>(null)
 
@@ -43,10 +34,8 @@ export default function ProductsPage() {
       const res = await apiFetch(`/api/products?search=${search}`)
       const json = await res.json()
       if (json.data) setProducts(json.data)
-      else { setProducts(DEMO_PRODUCTS); setIsDemo(true) }
     } catch {
-      setProducts(DEMO_PRODUCTS)
-      setIsDemo(true)
+      setProducts([])
     } finally {
       setLoading(false)
     }
@@ -65,12 +54,6 @@ export default function ProductsPage() {
 
   return (
     <div className="space-y-6">
-      {isDemo && (
-        <div className="bg-terza-blue/10 border border-terza-blue/30 rounded-xl px-4 py-3 text-terza-blue-bright text-sm">
-          Mostrando datos de demo. Conectá la API para ver datos reales.
-        </div>
-      )}
-
       {/* Header + actions */}
       <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
         <div className="relative flex-1 max-w-md">

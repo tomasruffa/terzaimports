@@ -15,13 +15,6 @@ interface Movement {
 
 import { apiFetch } from '@/utils/apiFetch'
 
-const DEMO_MOVEMENTS: Movement[] = [
-  { id: '1', type: 'in', quantity: 50, reason: 'Importación #2024-001', reference: 'IMP-001', created_at: new Date().toISOString(), product: { id: '1', name: 'Cable USB-C Premium 2m', sku: 'CAB-USBC-2M' } },
-  { id: '2', type: 'out', quantity: 20, reason: 'Venta mayorista', reference: 'VTA-123', created_at: new Date(Date.now() - 86400000).toISOString(), product: { id: '2', name: 'Auriculares Bluetooth TWS', sku: 'AUR-BT-TWS01' } },
-  { id: '3', type: 'in', quantity: 100, reason: 'Reposición de stock', reference: 'IMP-002', created_at: new Date(Date.now() - 172800000).toISOString(), product: { id: '3', name: 'Cargador Rápido 65W GaN', sku: 'CAR-GAN-65W' } },
-  { id: '4', type: 'adjustment', quantity: 45, reason: 'Conteo de inventario', reference: 'INV-2024', created_at: new Date(Date.now() - 259200000).toISOString(), product: { id: '2', name: 'Auriculares Bluetooth TWS', sku: 'AUR-BT-TWS01' } },
-]
-
 const typeConfig = {
   in: { label: 'Entrada', icon: TrendingUp, color: 'text-green-400', bg: 'bg-green-500/10' },
   out: { label: 'Salida', icon: TrendingDown, color: 'text-red-400', bg: 'bg-red-500/10' },
@@ -31,7 +24,6 @@ const typeConfig = {
 export default function StockPage() {
   const [movements, setMovements] = useState<Movement[]>([])
   const [loading, setLoading] = useState(true)
-  const [isDemo, setIsDemo] = useState(false)
   const [filter, setFilter] = useState<string>('all')
   const [modalOpen, setModalOpen] = useState(false)
 
@@ -41,10 +33,8 @@ export default function StockPage() {
       const res = await apiFetch(`/api/stock/movements?limit=50${typeQ}`)
       const json = await res.json()
       if (json.data) setMovements(json.data)
-      else { setMovements(DEMO_MOVEMENTS); setIsDemo(true) }
     } catch {
-      setMovements(DEMO_MOVEMENTS)
-      setIsDemo(true)
+      setMovements([])
     } finally {
       setLoading(false)
     }
@@ -61,12 +51,6 @@ export default function StockPage() {
 
   return (
     <div className="space-y-6">
-      {isDemo && (
-        <div className="bg-terza-blue/10 border border-terza-blue/30 rounded-xl px-4 py-3 text-terza-blue-bright text-sm">
-          Mostrando datos de demo. Conectá la API para ver datos reales.
-        </div>
-      )}
-
       <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
         <div className="flex gap-2 flex-wrap">
           {filters.map(f => (
@@ -96,6 +80,8 @@ export default function StockPage() {
             <tbody>
               {loading ? (
                 <tr><td colSpan={6} className="text-center py-12 text-terza-gray">Cargando...</td></tr>
+              ) : movements.length === 0 ? (
+                <tr><td colSpan={6} className="text-center py-12 text-terza-gray">Sin movimientos registrados</td></tr>
               ) : movements.map(m => {
                 const tc = typeConfig[m.type]
                 return (

@@ -113,12 +113,6 @@ export default function LoginPage() {
             </p>
           </div>
         </div>
-
-        {/* Demo Info */}
-        <div className="mt-6 bg-terza-blue/10 border border-terza-blue/30 rounded-lg px-4 py-3 text-terza-blue-bright text-xs">
-          <p className="font-medium mb-1">Demo: Credenciales de prueba</p>
-          <p className="text-terza-gray text-xs">Usa las credenciales de tu cuenta Supabase para acceder</p>
-        </div>
       </div>
     </div>
   )

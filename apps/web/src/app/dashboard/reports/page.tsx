@@ -1,33 +1,79 @@
 'use client'
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts'
-import { FileDown, TrendingUp } from 'lucide-react'
+import { FileDown, TrendingUp, Package } from 'lucide-react'
+import { apiFetch } from '@/utils/apiFetch'
 
-const stockByCategory = [
-  { category: 'Cables', value: 1948, units: 150 },
-  { category: 'Audio', value: 2699, units: 45 },
-  { category: 'Cargadores', value: 2799, units: 80 },
-  { category: 'Accesorios', value: 3398, units: 200 },
-  { category: 'Bolsos', value: 1499, units: 60 },
-]
-
-const marginData = [
-  { name: 'Cable USB-C 2m', buy: 3.5, sell: 12.99, margin: 271 },
-  { name: 'Auriculares TWS', buy: 18, sell: 59.99, margin: 233 },
-  { name: 'Cargador 65W', buy: 12, sell: 34.99, margin: 192 },
-  { name: 'Soporte Auto', buy: 4.5, sell: 16.99, margin: 278 },
-  { name: 'Funda NB 15"', buy: 8, sell: 24.99, margin: 212 },
-]
+interface Product {
+  id: string
+  name: string
+  category: string
+  purchase_price: number
+  sale_price: number
+  stock_quantity: number
+}
 
 const COLORS = ['#2563EB', '#3B82F6', '#60A5FA', '#93C5FD', '#1D4ED8']
 
 export default function ReportsPage() {
+  const [products, setProducts] = useState<Product[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    apiFetch('/api/products?active=true&limit=100')
+      .then(r => r.json())
+      .then(res => { if (res.data) setProducts(res.data) })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  const stockByCategory = useMemo(() => {
+    const byCategory = products.reduce((acc, p) => {
+      const cat = p.category || 'Sin categoría'
+      if (!acc[cat]) acc[cat] = { category: cat, value: 0, units: 0 }
+      acc[cat].value += p.stock_quantity * p.sale_price
+      acc[cat].units += p.stock_quantity
+      return acc
+    }, {} as Record<string, { category: string; value: number; units: number }>)
+    return Object.values(byCategory).sort((a, b) => b.value - a.value)
+  }, [products])
+
+  const marginData = useMemo(() =>
+    products
+      .filter(p => p.purchase_price > 0)
+      .map(p => ({
+        name: p.name,
+        buy: p.purchase_price,
+        sell: p.sale_price,
+        margin: Math.round(((p.sale_price - p.purchase_price) / p.purchase_price) * 100),
+      }))
+      .sort((a, b) => b.margin - a.margin),
+    [products]
+  )
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <p className="text-terza-gray text-sm">Cargando reportes...</p>
+      </div>
+    )
+  }
+
+  if (products.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 text-center">
+        <Package size={32} className="text-terza-gray/40 mb-3" />
+        <p className="text-terza-gray text-sm">No hay productos para generar reportes</p>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-white font-bold text-lg">Análisis de stock y márgenes</h2>
-          <p className="text-terza-gray text-sm">Datos de demo — conectá la API para reportes reales</p>
+          <p className="text-terza-gray text-sm">Basado en productos activos del inventario</p>
         </div>
         <button className="btn-secondary flex items-center gap-2 text-sm py-2 px-4">
           <FileDown size={16} />
@@ -36,10 +82,9 @@ export default function ReportsPage() {
       </div>
 
       <div className="grid lg:grid-cols-2 gap-6">
-        {/* Valor por categoría */}
         <div className="card-dark">
           <h3 className="text-white font-bold mb-1">Valor en stock por categoría</h3>
-          <p className="text-terza-gray text-xs mb-5">En dólares</p>
+          <p className="text-terza-gray text-xs mb-5">Precio de venta × unidades</p>
           <ResponsiveContainer width="100%" height={240}>
             <BarChart data={stockByCategory} layout="vertical">
               <CartesianGrid strokeDasharray="3 3" stroke="#374151" horizontal={false} />
@@ -49,12 +94,11 @@ export default function ReportsPage() {
                 contentStyle={{ background: '#111827', border: '1px solid #374151', borderRadius: '8px', color: '#fff' }}
                 formatter={(v: number) => [`$${v.toLocaleString()}`, 'Valor']}
               />
-              <Bar dataKey="value" fill="#2563EB" radius={[0, 4, 4, 0]} name="Valor USD" />
+              <Bar dataKey="value" fill="#2563EB" radius={[0, 4, 4, 0]} name="Valor" />
             </BarChart>
           </ResponsiveContainer>
         </div>
 
-        {/* Distribución por categoría (pie) */}
         <div className="card-dark">
           <h3 className="text-white font-bold mb-1">Distribución de unidades</h3>
           <p className="text-terza-gray text-xs mb-5">Porcentaje de unidades en stock</p>
@@ -76,7 +120,6 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      {/* Márgenes */}
       <div className="card-dark">
         <div className="flex items-center gap-2 mb-1">
           <TrendingUp size={18} className="text-green-400" />

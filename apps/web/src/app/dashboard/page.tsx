@@ -14,27 +14,13 @@ interface Metrics {
 
 import { apiFetch } from '@/utils/apiFetch'
 
-// Demo data for when API is not connected
-const DEMO_METRICS: Metrics = {
-  total_products: 5,
-  total_stock_value: 14850,
-  low_stock_products: 1,
+const EMPTY_METRICS: Metrics = {
+  total_products: 0,
+  total_stock_value: 0,
+  low_stock_products: 0,
   out_of_stock_products: 0,
-  top_products: [
-    { id: '1', name: 'Cable USB-C Premium 2m', stock_quantity: 150, sale_price: 12.99, total_value: 1948.5 },
-    { id: '2', name: 'Auriculares BT TWS', stock_quantity: 45, sale_price: 59.99, total_value: 2699.55 },
-    { id: '3', name: 'Cargador 65W GaN', stock_quantity: 80, sale_price: 34.99, total_value: 2799.2 },
-    { id: '4', name: 'Soporte Auto Magnético', stock_quantity: 200, sale_price: 16.99, total_value: 3398 },
-    { id: '5', name: 'Funda Notebook 15"', stock_quantity: 60, sale_price: 24.99, total_value: 1499.4 },
-  ],
-  monthly_movements: [
-    { month: 'Ene', entries: 120, exits: 80 },
-    { month: 'Feb', entries: 200, exits: 150 },
-    { month: 'Mar', entries: 180, exits: 160 },
-    { month: 'Abr', entries: 250, exits: 200 },
-    { month: 'May', entries: 300, exits: 240 },
-    { month: 'Jun', entries: 220, exits: 190 },
-  ]
+  top_products: [],
+  monthly_movements: [],
 }
 
 const statCards = (m: Metrics) => [
@@ -73,18 +59,16 @@ const statCards = (m: Metrics) => [
 ]
 
 export default function DashboardPage() {
-  const [metrics, setMetrics] = useState<Metrics>(DEMO_METRICS)
+  const [metrics, setMetrics] = useState<Metrics>(EMPTY_METRICS)
   const [loading, setLoading] = useState(true)
-  const [isDemo, setIsDemo] = useState(false)
 
   useEffect(() => {
     apiFetch('/api/stock/dashboard')
       .then(r => r.json())
       .then(res => {
         if (res.data) setMetrics(res.data)
-        else setIsDemo(true)
       })
-      .catch(() => setIsDemo(true))
+      .catch(() => {})
       .finally(() => setLoading(false))
   }, [])
 
@@ -101,12 +85,6 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      {isDemo && (
-        <div className="bg-terza-blue/10 border border-terza-blue/30 rounded-xl px-4 py-3 text-terza-blue-bright text-sm">
-          Mostrando datos de demo. Conectá la API para ver datos reales.
-        </div>
-      )}
-
       {/* Stat cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         {statCards(metrics).map(card => (

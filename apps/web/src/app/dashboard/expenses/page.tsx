@@ -16,12 +16,6 @@ interface Expense {
 
 import { apiFetch } from '@/utils/apiFetch'
 
-const DEMO_EXPENSES: Expense[] = [
-  { id: '1', category: 'Comisiones', description: 'Comisión Mercado Pago', amount: 450.50, payment_method: 'Débito', expense_date: new Date().toISOString().split('T')[0], notes: 'Mes de junio', created_at: new Date().toISOString() },
-  { id: '2', category: 'Servicios', description: 'Hosting Supabase', amount: 25, payment_method: 'Tarjeta', expense_date: new Date(Date.now() - 86400000).toISOString().split('T')[0], notes: null, created_at: new Date().toISOString() },
-  { id: '3', category: 'Oficina', description: 'Alquiler local', amount: 1200, payment_method: 'Transferencia', expense_date: new Date(Date.now() - 172800000).toISOString().split('T')[0], notes: 'Junio 2026', created_at: new Date().toISOString() },
-]
-
 const categoryColors = {
   Comisiones: { icon: DollarSign, color: 'text-blue-400', bg: 'bg-blue-500/10' },
   Servicios: { icon: Zap, color: 'text-yellow-400', bg: 'bg-yellow-500/10' },
@@ -31,7 +25,6 @@ const categoryColors = {
 export default function ExpensesPage() {
   const [expenses, setExpenses] = useState<Expense[]>([])
   const [loading, setLoading] = useState(true)
-  const [isDemo, setIsDemo] = useState(false)
   const [modalOpen, setModalOpen] = useState(false)
   const [editExpense, setEditExpense] = useState<Expense | null>(null)
 
@@ -40,10 +33,8 @@ export default function ExpensesPage() {
       const res = await apiFetch(`/api/expenses?limit=50`)
       const json = await res.json()
       if (json.data) setExpenses(json.data)
-      else { setExpenses(DEMO_EXPENSES); setIsDemo(true) }
     } catch {
-      setExpenses(DEMO_EXPENSES)
-      setIsDemo(true)
+      setExpenses([])
     } finally {
       setLoading(false)
     }
@@ -69,12 +60,6 @@ export default function ExpensesPage() {
 
   return (
     <div className="space-y-6">
-      {isDemo && (
-        <div className="bg-terza-blue/10 border border-terza-blue/30 rounded-xl px-4 py-3 text-terza-blue-bright text-sm">
-          Mostrando datos de demo. Conectá la API para ver datos reales.
-        </div>
-      )}
-
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-white font-bold text-lg">Gastos Operacionales</h2>

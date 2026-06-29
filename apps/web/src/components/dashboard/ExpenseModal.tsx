@@ -34,7 +34,7 @@ export default function ExpenseModal({ expense, onClose, onSaved }: Props) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const set = (k: keyof Expense, v: string | number) => setForm(f => ({ ...f, [k]: v }))
+  const set = (k: keyof Expense, v: string | number | null) => setForm(f => ({ ...f, [k]: v }))
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

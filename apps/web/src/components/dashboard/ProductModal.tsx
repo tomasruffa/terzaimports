@@ -36,7 +36,7 @@ const EMPTY: Product = {
 async function ensureBucket(supabase: ReturnType<typeof getSupabaseClient>) {
   if (!supabase) return
   const { data: buckets } = await supabase.storage.listBuckets()
-  const exists = buckets?.some(b => b.name === 'products')
+  const exists = buckets?.some((b: { name: string }) => b.name === 'products')
   if (!exists) {
     await supabase.storage.createBucket('products', { public: true })
   }
