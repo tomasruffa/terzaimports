@@ -1,0 +1,24 @@
+{
+  "name": "terzaimports",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently --kill-others-on-fail -n web,api -c cyan,yellow \"npm run dev --workspace=apps/web\" \"npm run dev --workspace=apps/api\"",
+    "build": "turbo run build",
+    "start": "turbo run start",
+    "lint": "turbo run lint",
+    "clean": "turbo run clean"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0",
+    "turbo": "^2.0.0"
+  },
+  "packageManager": "npm@10.9.2",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

@@ -1,0 +1,91 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+:root {
+  --terza-navy: #0B0F1A;
+  --terza-navy-light: #111827;
+  --terza-blue: #2563EB;
+  --terza-blue-light: #3B82F6;
+  --terza-blue-bright: #60A5FA;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--terza-navy);
+  color: #fff;
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-terza-blue hover:bg-terza-blue-light text-white font-semibold py-3 px-6 rounded-lg transition-all duration-200 shadow-lg hover:shadow-blue-500/25 hover:shadow-xl;
+  }
+
+  .btn-secondary {
+    @apply border border-terza-blue text-terza-blue-bright hover:bg-terza-blue/10 font-semibold py-3 px-6 rounded-lg transition-all duration-200;
+  }
+
+  .card-dark {
+    @apply bg-terza-navy-light border border-terza-gray-dark/30 rounded-xl p-6;
+  }
+
+  .input-field {
+    @apply w-full bg-terza-navy border border-terza-gray-dark/50 rounded-lg px-4 py-2.5 text-white
+      placeholder-terza-gray/50 focus:outline-none focus:border-terza-blue transition-colors text-sm;
+  }
+
+  .input-field option {
+    @apply bg-terza-navy-light text-white;
+  }
+
+  .gradient-text {
+    @apply bg-gradient-to-r from-terza-blue-light to-terza-blue-glow bg-clip-text text-transparent;
+  }
+
+  .section-title {
+    @apply text-3xl md:text-4xl font-bold text-white mb-4;
+  }
+
+  .section-subtitle {
+    @apply text-terza-gray text-lg max-w-2xl mx-auto;
+  }
+
+  /* Light-background section variants */
+  .section-title-light {
+    @apply text-3xl md:text-4xl font-bold text-gray-900 mb-4;
+  }
+
+  .section-subtitle-light {
+    @apply text-gray-500 text-lg max-w-2xl mx-auto;
+  }
+
+  .card-light {
+    @apply bg-white border border-gray-200 rounded-xl p-6 shadow-sm hover:shadow-md transition-shadow;
+  }
+}
+
+/* Scrollbar personalizado */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #0B0F1A;
+}
+::-webkit-scrollbar-thumb {
+  background: #2563EB;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #3B82F6;
+}
