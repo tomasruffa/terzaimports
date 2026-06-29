@@ -39,7 +39,7 @@ El `vercel.json` en `apps/web` instala dependencias desde la raíz del monorepo.
 ### Railway (API)
 
 1. Crear proyecto en [Railway](https://railway.app) desde el mismo repo.
-2. **Root Directory:** `apps/api`
+2. **Root Directory:** `apps/api` (importante — si queda en la raíz, `npm start` intenta levantar Next.js y falla el healthcheck).
 3. Variables de entorno:
 
 | Variable | Valor |
@@ -48,7 +48,9 @@ El `vercel.json` en `apps/web` instala dependencias desde la raíz del monorepo.
 | `SUPABASE_SERVICE_ROLE_KEY` | Service role key (solo backend) |
 | `ALLOWED_ORIGINS` | Dominio de Vercel, ej. `https://terzaimports.vercel.app` |
 
-Railway asigna `PORT` automáticamente; no hace falta configurarlo.
+Railway asigna `PORT` automáticamente; no configures `API_PORT` en producción.
+
+**Healthcheck:** el deploy debe responder `200` en `GET /health`. Si falla, revisá en Railway → Deployments → Logs que veas `Terza API listening on 0.0.0.0:XXXX`.
 
 ### Orden recomendado
 

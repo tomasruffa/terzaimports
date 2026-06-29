@@ -10,6 +10,7 @@
     "dev": "concurrently --kill-others-on-fail -n web,api -c cyan,yellow \"npm run dev --workspace=apps/web\" \"npm run dev --workspace=apps/api\"",
     "build": "turbo run build",
     "start": "turbo run start",
+    "start:api": "npm run start --workspace=@terza/api",
     "lint": "turbo run lint",
     "clean": "turbo run clean"
   },

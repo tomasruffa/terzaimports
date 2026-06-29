@@ -1,0 +1,12 @@
+# Usar si el servicio Railway apunta a la raíz del repo (sin Root Directory).
+# Recomendado: configurar Root Directory = apps/api en Railway y usar apps/api/railway.toml
+
+[build]
+builder = "nixpacks"
+buildCommand = "npm install"
+
+[deploy]
+startCommand = "npm run start:api"
+healthcheckPath = "/health"
+healthcheckTimeout = 60
+restartPolicyType = "ON_FAILURE"
