@@ -1,0 +1,9 @@
+# Segundo servicio Railway: panel admin (Next.js)
+# Configurar en Railway: Root Directory vacío (repo root), Dockerfile Path = apps/admin/Dockerfile
+
+[build]
+builder = "dockerfile"
+dockerfilePath = "apps/admin/Dockerfile"
+
+[deploy]
+restartPolicyType = "ON_FAILURE"

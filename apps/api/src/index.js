@@ -30,11 +30,13 @@ app.use(cors({
 }))
 app.use(express.json())
 
-const requireAuth = require('./middleware/auth')
 const productsRouter = require('./routes/products')
 const stockRouter = require('./routes/stock')
 const expensesRouter = require('./routes/expenses')
+const authRouter = require('./routes/auth')
+const requireAuth = require('./middleware/auth')
 
+app.use('/api/auth', authRouter)
 app.use('/api/products', productsRouter)
 app.use('/api/stock', requireAuth, stockRouter)
 app.use('/api/expenses', requireAuth, expensesRouter)

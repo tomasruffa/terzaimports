@@ -3,7 +3,6 @@ import { useState, useRef, useCallback } from 'react'
 import { X, Save, Upload, Trash2, ImagePlus, GripVertical } from 'lucide-react'
 import Image from 'next/image'
 import { apiFetch } from '@/utils/apiFetch'
-import { getSupabaseClient } from '@/lib/supabase'
 
 interface Product {
   id?: string
@@ -33,33 +32,19 @@ const EMPTY: Product = {
   origin_country: '', image_url: null, images: []
 }
 
-async function ensureBucket(supabase: ReturnType<typeof getSupabaseClient>) {
-  if (!supabase) return
-  const { data: buckets } = await supabase.storage.listBuckets()
-  const exists = buckets?.some((b: { name: string }) => b.name === 'products')
-  if (!exists) {
-    await supabase.storage.createBucket('products', { public: true })
-  }
-}
-
 async function uploadImage(file: File, sku: string): Promise<string> {
-  const supabase = getSupabaseClient()
-  if (!supabase) throw new Error('Supabase no disponible')
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('sku', sku)
 
-  await ensureBucket(supabase)
+  const res = await apiFetch('/api/products/upload', {
+    method: 'POST',
+    body: formData,
+  })
 
-  const ext = file.name.split('.').pop()?.toLowerCase() ?? 'jpg'
-  const safeSku = sku.replace(/[^a-zA-Z0-9-_]/g, '-').toLowerCase()
-  const filename = `${safeSku}-${Date.now()}.${ext}`
-
-  const { error } = await supabase.storage
-    .from('products')
-    .upload(filename, file, { upsert: true, contentType: file.type })
-
-  if (error) throw new Error(error.message)
-
-  const { data } = supabase.storage.from('products').getPublicUrl(filename)
-  return data.publicUrl
+  const json = await res.json()
+  if (!res.ok || json.error) throw new Error(json.error ?? 'Error subiendo imagen')
+  return json.data.url
 }
 
 export default function ProductModal({ product, onClose, onSaved }: Props) {

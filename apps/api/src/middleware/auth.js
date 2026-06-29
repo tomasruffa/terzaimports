@@ -1,12 +1,18 @@
 const { supabase } = require('../lib/supabase')
 
-module.exports = async function requireAuth(req, res, next) {
+function extractToken(req) {
   const authHeader = req.headers.authorization
-  if (!authHeader?.startsWith('Bearer ')) {
+  if (authHeader?.startsWith('Bearer ')) {
+    return authHeader.slice(7)
+  }
+  return null
+}
+
+module.exports = async function requireAuth(req, res, next) {
+  const token = extractToken(req)
+  if (!token) {
     return res.status(401).json({ data: null, error: 'No autorizado' })
   }
-
-  const token = authHeader.slice(7)
   const { data: { user }, error } = await supabase.auth.getUser(token)
 
   if (error || !user) {

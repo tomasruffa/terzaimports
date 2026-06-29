@@ -2,8 +2,9 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { getSupabaseClient } from '@/lib/supabase'
 import { AlertCircle, Loader } from 'lucide-react'
+import { apiFetch } from '@/utils/apiFetch'
+import { setAuth } from '@/utils/authStorage'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -11,37 +12,37 @@ export default function LoginPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const router = useRouter()
-  const supabase = getSupabaseClient()
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
     setLoading(true)
 
-    if (!supabase) {
-      setError('Error de configuración')
+    try {
+      const res = await apiFetch('/api/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ email, password }),
+      })
+
+      const json = await res.json()
+
+      if (!res.ok || json.error) {
+        setError(json.error || 'Error al iniciar sesión')
+        setLoading(false)
+        return
+      }
+
+      setAuth(json.data.access_token)
+      router.push('/dashboard')
+    } catch {
+      setError('Error de conexión con la API')
       setLoading(false)
-      return
     }
-
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
-
-    if (signInError) {
-      setError(signInError.message || 'Error al iniciar sesión')
-      setLoading(false)
-      return
-    }
-
-    router.push('/dashboard')
   }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-terza-navy to-terza-navy-light flex items-center justify-center px-4">
       <div className="w-full max-w-md">
-        {/* Logo */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center gap-3 mb-4">
             <div className="w-12 h-12 bg-blue-gradient rounded-lg flex items-center justify-center text-white font-black text-lg">T</div>
@@ -54,7 +55,6 @@ export default function LoginPage() {
           <p className="text-terza-gray text-sm mt-2">Ingresá con tu cuenta para acceder</p>
         </div>
 
-        {/* Form Card */}
         <div className="bg-terza-navy-light border border-terza-gray-dark/30 rounded-xl p-8 shadow-lg shadow-black/50">
           <form onSubmit={handleLogin} className="space-y-4">
             {error && (

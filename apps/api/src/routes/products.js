@@ -1,6 +1,18 @@
 const express = require('express')
+const multer = require('multer')
 const { supabase } = require('../lib/supabase')
+const { uploadProductImage } = require('../lib/storage')
 const requireAuth = require('../middleware/auth')
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) cb(null, true)
+    else cb(new Error('Solo se permiten imágenes'))
+  },
+})
+
 const router = express.Router()
 
 // GET /products
@@ -22,6 +34,25 @@ router.get('/', async (req, res) => {
   if (error) return res.status(500).json({ data: null, error: error.message })
 
   res.json({ data, error: null, total: count, page: Number(page), limit: Number(limit) })
+})
+
+// POST /products/upload
+router.post('/upload', requireAuth, upload.single('file'), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ data: null, error: 'Archivo requerido' })
+  }
+
+  const sku = req.body.sku
+  if (!sku) {
+    return res.status(400).json({ data: null, error: 'SKU requerido' })
+  }
+
+  try {
+    const url = await uploadProductImage(req.file, sku)
+    res.json({ data: { url }, error: null })
+  } catch (err) {
+    res.status(500).json({ data: null, error: err.message })
+  }
 })
 
 // GET /products/:id
