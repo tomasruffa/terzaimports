@@ -10,7 +10,10 @@ function getClient() {
     if (!url || !key) {
       throw new Error('SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY son requeridos. Configurá el archivo .env')
     }
-    _client = createClient(url, key)
+    _client = createClient(url, key, {
+      auth: { persistSession: false, autoRefreshToken: false },
+      realtime: { transport: require('ws') },
+    })
   }
   return _client
 }
