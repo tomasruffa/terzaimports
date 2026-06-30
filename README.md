@@ -63,15 +63,15 @@ Railway asigna `PORT` automáticamente. **No configures `API_PORT` en producció
 Segundo servicio en el mismo proyecto Railway (o uno aparte).
 
 1. **Root Directory:** vacío (raíz del repo). **No** uses `apps/admin` — el build necesita `packages/shared` y los workspaces.
-2. **Config file:** `railway.admin.toml` (Settings → Config-as-code → Railway Config File).
-3. **Builder:** Dockerfile → `apps/admin/Dockerfile` (viene del config file).
+2. **Config-as-code → Railway Config File:** cambiar de `/railway.toml` a **`/railway.admin.toml`**
+3. El build debe usar `apps/admin/Dockerfile` (definido en ese config file).
 4. Variables de entorno:
 
 | Variable | Valor |
 |---|---|
 | `NEXT_PUBLIC_API_URL` | URL pública del servicio API en Railway |
 
-**Error `"/src": not found` al deployar admin:** Railway está usando el Dockerfile de la API (`railway.toml` por defecto). Configurá **Config file** = `railway.admin.toml` en ese servicio.
+**Error `"/src": not found`:** el servicio admin está usando el config de la API. Por defecto Railway lee `/railway.toml`, que apunta a `apps/api/Dockerfile` y ejecuta `COPY src ./src` (carpeta `src` de la API, que no existe en la raíz del repo). Solución: **Config file** = `/railway.admin.toml`.
 
 ### Orden recomendado
 

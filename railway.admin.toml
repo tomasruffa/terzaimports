@@ -1,9 +1,8 @@
 # Servicio Railway: panel admin (Next.js)
 #
-# En Railway → servicio admin → Settings:
+# En Railway → servicio admin → Settings → Config-as-code:
+#   Railway Config File: /railway.admin.toml  (NO /railway.toml)
 #   Root Directory: vacío (raíz del repo, NO apps/admin)
-#   Config file: railway.admin.toml
-#   (El Dockerfile path se toma de este archivo.)
 
 [build]
 builder = "dockerfile"

@@ -1,0 +1,13 @@
+# Servicio Railway: API (Express)
+#
+# Opción A (recomendada): Root Directory = apps/api → usa apps/api/railway.toml
+# Opción B: Root Directory vacío → Config file = railway.api.toml
+
+[build]
+builder = "dockerfile"
+dockerfilePath = "apps/api/Dockerfile"
+
+[deploy]
+healthcheckPath = "/health"
+healthcheckTimeout = 120
+restartPolicyType = "ON_FAILURE"
