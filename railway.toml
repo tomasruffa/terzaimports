@@ -1,5 +1,6 @@
-# Fallback si el servicio NO tiene Root Directory = apps/api
-# Recomendado: Root Directory = apps/api (usa apps/api/railway.toml + Dockerfile)
+# SOLO para el servicio API (no usar para admin).
+# API: Root Directory = apps/api → usa apps/api/railway.toml + Dockerfile
+# Admin: Root Directory vacío → Config file = railway.admin.toml (ver README)
 
 [build]
 builder = "dockerfile"

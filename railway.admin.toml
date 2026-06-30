@@ -1,5 +1,9 @@
-# Segundo servicio Railway: panel admin (Next.js)
-# Configurar en Railway: Root Directory vacío (repo root), Dockerfile Path = apps/admin/Dockerfile
+# Servicio Railway: panel admin (Next.js)
+#
+# En Railway → servicio admin → Settings:
+#   Root Directory: vacío (raíz del repo, NO apps/admin)
+#   Config file: railway.admin.toml
+#   (El Dockerfile path se toma de este archivo.)
 
 [build]
 builder = "dockerfile"

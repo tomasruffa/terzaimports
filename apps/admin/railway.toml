@@ -1,6 +1,3 @@
-[build]
-builder = "dockerfile"
-dockerfilePath = "Dockerfile"
-
-[deploy]
-restartPolicyType = "ON_FAILURE"
+# El admin se construye desde la raíz del monorepo (necesita packages/shared).
+# No uses Root Directory = apps/admin.
+# En Railway: Root Directory vacío + Config file = railway.admin.toml (en la raíz del repo).

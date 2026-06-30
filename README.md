@@ -6,6 +6,7 @@ Monorepo con landing + dashboard (Next.js) y API (Express).
 terzaimports/
 ├── apps/
 │   ├── web/      → Vercel (landing + dashboard)
+│   ├── admin/    → Railway (panel admin)
 │   └── api/      → Railway (REST API)
 └── packages/
     └── shared/   → tipos compartidos
@@ -56,6 +57,21 @@ Railway asigna `PORT` automáticamente. **No configures `API_PORT` en producció
 - En Settings → Networking → **no** configures un puerto fijo distinto de `$PORT`.
 - En Settings → Deploy → Healthcheck Path: `/health` (o dejalo vacío para desactivarlo temporalmente).
 - En Deployments → View logs, buscá `[startup] PORT=...` y `Terza API listening on`.
+
+### Railway (admin)
+
+Segundo servicio en el mismo proyecto Railway (o uno aparte).
+
+1. **Root Directory:** vacío (raíz del repo). **No** uses `apps/admin` — el build necesita `packages/shared` y los workspaces.
+2. **Config file:** `railway.admin.toml` (Settings → Config-as-code → Railway Config File).
+3. **Builder:** Dockerfile → `apps/admin/Dockerfile` (viene del config file).
+4. Variables de entorno:
+
+| Variable | Valor |
+|---|---|
+| `NEXT_PUBLIC_API_URL` | URL pública del servicio API en Railway |
+
+**Error `"/src": not found` al deployar admin:** Railway está usando el Dockerfile de la API (`railway.toml` por defecto). Configurá **Config file** = `railway.admin.toml` en ese servicio.
 
 ### Orden recomendado
 
