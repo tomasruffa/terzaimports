@@ -48,7 +48,7 @@ El `vercel.json` en `apps/web` instala dependencias desde la raíz del monorepo.
 |---|---|
 | `SUPABASE_URL` | URL del proyecto Supabase |
 | `SUPABASE_SERVICE_ROLE_KEY` | Service role key (solo backend) |
-| `ALLOWED_ORIGINS` | Dominio de Vercel, ej. `https://terzaimports.vercel.app` |
+| `ALLOWED_ORIGINS` | Orígenes del frontend, separados por coma. Ej: `https://terzaimports.vercel.app,https://tu-admin.up.railway.app,http://localhost:3000,http://localhost:3001` |
 | `HOSTNAME` | `::` (opcional, ya es el default en el código) |
 
 Railway asigna `PORT` automáticamente. **No configures `API_PORT` en producción.**
@@ -77,7 +77,9 @@ Segundo servicio en el mismo proyecto Railway (o uno aparte).
 
 1. Deploy API en Railway → copiar URL pública.
 2. Configurar `NEXT_PUBLIC_API_URL` en Vercel con esa URL.
-3. Configurar `ALLOWED_ORIGINS` en Railway con el dominio de Vercel.
+3. Configurar `ALLOWED_ORIGINS` en Railway con **todos** los dominios que llaman a la API (Vercel web, admin en Railway, localhost para dev).
+
+**Error CORS (`El pedido CORS falló`, status null):** el origen del navegador no está en `ALLOWED_ORIGINS`. En Railway → servicio API → Variables, agregá la URL exacta desde la que hacés login (ej. `http://localhost:3001` para admin local, o `https://tu-admin.up.railway.app`). Reiniciá el deploy y verificá en los logs `[startup] CORS allowed origins: ...`.
 4. Deploy web en Vercel.
 
 ## Scripts

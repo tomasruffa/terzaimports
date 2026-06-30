@@ -5,11 +5,21 @@ const cors = require('cors')
 require('dotenv').config()
 require('dotenv').config({ path: path.resolve(__dirname, '../../../.env') })
 
+const DEFAULT_ORIGINS = ['http://localhost:3000', 'http://localhost:3001']
+
+function parseAllowedOrigins() {
+  const fromEnv = process.env.ALLOWED_ORIGINS?.split(',').map((o) => o.trim()).filter(Boolean)
+  return fromEnv?.length ? fromEnv : DEFAULT_ORIGINS
+}
+
+const allowedOrigins = parseAllowedOrigins()
+
 const app = express()
 const PORT = Number(process.env.PORT || process.env.API_PORT || 4000)
 const HOST = process.env.HOSTNAME || '::'
 
 console.log(`[startup] PORT=${process.env.PORT ?? '(unset)'} API_PORT=${process.env.API_PORT ?? '(unset)'} → listening on ${HOST}:${PORT}`)
+console.log(`[startup] CORS allowed origins: ${allowedOrigins.join(', ')}`)
 
 // Healthcheck primero — Railway valida esto antes de marcar el deploy como OK
 app.get('/health', (_req, res) => {
@@ -25,7 +35,13 @@ app.get('/', (_req, res) => {
 })
 
 app.use(cors({
-  origin: process.env.ALLOWED_ORIGINS?.split(',').map(o => o.trim()).filter(Boolean) || ['http://localhost:3000'],
+  origin(origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      return callback(null, true)
+    }
+    console.warn(`[cors] blocked origin: ${origin}`)
+    return callback(null, false)
+  },
   credentials: true,
 }))
 app.use(express.json())
