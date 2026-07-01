@@ -2,5 +2,5 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "installCommand": "cd ../.. && npm install",
   "buildCommand": "npm run build",
-  "ignoreCommand": "git diff HEAD^ HEAD --quiet -- apps/web packages/shared"
+  "ignoreCommand": "cd ../.. && git diff HEAD^ HEAD --quiet -- apps/web packages/shared"
 }
