@@ -1,38 +1,11 @@
-import { MessageCircle, ArrowRight, ShoppingBag } from 'lucide-react'
-import { apiFetch } from '@/utils/apiFetch'
+import { MessageCircle, ArrowRight, Expand } from 'lucide-react'
 import Image from 'next/image'
+import Link from 'next/link'
+import { LANDING_PRODUCTS, type LandingProduct } from '@/data/landingProducts'
+import { whatsAppHref } from '@/lib/contact'
+import { isAnimatedAsset } from '@/lib/media'
 
-const WA_NUMBER = '5491170751477'
-
-interface Product {
-  id: string
-  name: string
-  description: string | null
-  sale_price: number
-  images: string[] | null
-  image_url: string | null
-  stock_quantity: number
-}
-
-async function getProducts(): Promise<Product[]> {
-  try {
-    const res = await apiFetch('/api/products?active=true&limit=100')
-    if (!res.ok) return []
-    const json = await res.json()
-    return json.data ?? []
-  } catch {
-    return []
-  }
-}
-
-function waLink(productName: string) {
-  const text = encodeURIComponent(
-    `Hola! Me interesa el producto *${productName}* de terzaimports.com.ar. ¿Podrían darme precio y disponibilidad?`
-  )
-  return `https://wa.me/${WA_NUMBER}?text=${text}`
-}
-
-function ProductCard({ product }: { product: Product }) {
+function ProductCard({ product }: { product: LandingProduct }) {
   const primaryImage =
     (product.images && product.images.length > 0 ? product.images[0] : null) ??
     product.image_url
@@ -41,81 +14,102 @@ function ProductCard({ product }: { product: Product }) {
 
   return (
     <div className="group bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1 flex flex-col">
-      {/* Image */}
-      <div className="relative aspect-[4/3] bg-gray-100 overflow-hidden">
-        {primaryImage ? (
+      <Link
+        href={`/productos/${product.id}`}
+        className="relative aspect-[4/3] bg-gray-100 overflow-hidden block"
+      >
+        {isAnimatedAsset(primaryImage) ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={primaryImage}
+            alt={product.name}
+            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+          />
+        ) : (
           <Image
             src={primaryImage}
             alt={product.name}
             fill
             className="object-cover group-hover:scale-105 transition-transform duration-500"
-            sizes="(max-width: 768px) 100vw, 50vw"
+            sizes="(max-width: 768px) 100vw, 25vw"
           />
-        ) : (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
-            <ShoppingBag size={48} className="text-gray-300" />
-            <span className="text-gray-400 text-xs">Imagen próximamente</span>
-          </div>
         )}
+        <span className="absolute bottom-3 right-3 flex items-center gap-1 rounded-lg bg-black/55 px-2.5 py-1 text-xs font-medium text-white backdrop-blur-sm">
+          <Expand size={14} />
+          Ver en grande
+        </span>
 
-        {/* Stock badge */}
         <div className="absolute top-3 right-3">
-          <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
-            inStock ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
-          }`}>
+          <span
+            className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
+              inStock ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
+            }`}
+          >
             {inStock ? 'En stock' : 'Sin stock'}
           </span>
         </div>
 
-        {/* Extra image thumbnails */}
         {product.images && product.images.length > 1 && (
           <div className="absolute bottom-2 left-2 flex gap-1">
             {product.images.slice(1, 4).map((img, i) => (
-              <div key={i} className="w-9 h-9 rounded-lg overflow-hidden border-2 border-white shadow bg-gray-100">
+              <div
+                key={i}
+                className="w-9 h-9 rounded-lg overflow-hidden border-2 border-white shadow bg-gray-100"
+              >
                 <Image src={img} alt="" width={36} height={36} className="object-cover w-full h-full" />
               </div>
             ))}
           </div>
         )}
-      </div>
+      </Link>
 
-      {/* Content */}
       <div className="p-5 flex flex-col flex-1">
-        <h3 className="text-gray-900 font-bold text-lg mb-2 leading-tight">{product.name}</h3>
-        {product.description && (
-          <p className="text-gray-500 text-sm leading-relaxed mb-4 flex-1 line-clamp-3">
-            {product.description}
-          </p>
-        )}
+        <Link href={`/productos/${product.id}`}>
+          <h3 className="text-gray-900 font-bold text-lg mb-2 leading-tight hover:text-terza-blue transition-colors">
+            {product.name}
+          </h3>
+        </Link>
+        <p className="text-gray-500 text-sm leading-relaxed mb-4 flex-1 line-clamp-3">
+          {product.description}
+        </p>
 
-        <div className="mt-auto pt-4 border-t border-gray-100 flex items-center justify-between gap-3">
-          <div>
-            <p className="text-gray-400 text-xs mb-0.5">Precio</p>
+        <div className="mt-auto space-y-3 border-t border-gray-100 pt-4">
+          <p className="text-sm text-gray-600">
+            <span className="text-gray-400">Precio · </span>
             {product.sale_price > 0 ? (
-              <p className="text-gray-900 font-black text-xl">
+              <span className="font-bold text-gray-900">
                 ${product.sale_price.toLocaleString('es-AR', { minimumFractionDigits: 0 })}
-              </p>
+              </span>
             ) : (
-              <p className="text-terza-blue font-semibold text-sm">Consultá precio</p>
+              <span className="font-semibold text-terza-blue">Consultá por WhatsApp</span>
             )}
+          </p>
+
+          <div className="grid grid-cols-2 gap-2">
+            <Link
+              href={`/productos/${product.id}`}
+              className="flex min-h-[42px] items-center justify-center rounded-xl border border-gray-200 bg-white px-2 text-center text-sm font-semibold text-gray-800 transition-colors hover:border-terza-blue hover:text-terza-blue"
+            >
+              Ver producto
+            </Link>
+            <a
+              href={whatsAppHref(product.name)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex min-h-[42px] items-center justify-center gap-1.5 rounded-xl bg-green-600 px-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-green-500"
+            >
+              <MessageCircle size={16} className="shrink-0" />
+              <span>Consultar</span>
+            </a>
           </div>
-          <a
-            href={waLink(product.name)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-2 bg-green-600 hover:bg-green-500 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition-colors whitespace-nowrap shadow-sm"
-          >
-            <MessageCircle size={15} />
-            Consultar
-          </a>
         </div>
       </div>
     </div>
   )
 }
 
-export default async function Products() {
-  const products = await getProducts()
+export default function Products() {
+  const products = LANDING_PRODUCTS
 
   return (
     <section id="productos" className="py-24 bg-gray-50">
@@ -124,25 +118,15 @@ export default async function Products() {
           <span className="text-terza-blue text-sm font-semibold tracking-widest uppercase">Marketplace</span>
           <h2 className="section-title-light mt-3">Nuestros productos</h2>
           <p className="section-subtitle-light">
-            Productos importados directamente de los mejores fabricantes.
-            Consultá precio y disponibilidad por WhatsApp al instante.
+            Lentes Meta, Oakley y audio DJI importados. Consultá precio y disponibilidad por WhatsApp al instante.
           </p>
         </div>
 
-        {products.length === 0 ? (
-          <div className="text-center py-16">
-            <ShoppingBag size={48} className="text-gray-300 mx-auto mb-4" />
-            <p className="text-gray-400">Próximamente nuevos productos.</p>
-          </div>
-        ) : (
-          <div className={`grid gap-8 ${
-            products.length === 1 ? 'max-w-md mx-auto' :
-            products.length === 2 ? 'sm:grid-cols-2 max-w-3xl mx-auto' :
-            'sm:grid-cols-2 lg:grid-cols-3'
-          }`}>
-            {products.map(p => <ProductCard key={p.id} product={p} />)}
-          </div>
-        )}
+        <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4 max-w-7xl mx-auto">
+          {products.map(p => (
+            <ProductCard key={p.id} product={p} />
+          ))}
+        </div>
 
         <div className="text-center mt-14">
           <p className="text-gray-500 mb-5">¿Buscás algo que no ves acá?</p>

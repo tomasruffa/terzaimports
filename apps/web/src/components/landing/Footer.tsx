@@ -1,4 +1,5 @@
 import { Globe } from 'lucide-react'
+import { TerzaLogo } from '@/components/brand/TerzaLogo'
 
 export default function Footer() {
   return (
@@ -6,11 +7,11 @@ export default function Footer() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid sm:grid-cols-3 gap-8 mb-10">
           <div>
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-8 h-8 bg-blue-gradient rounded-full flex items-center justify-center text-white font-black text-sm">T</div>
-              <span className="text-white font-bold text-lg tracking-wider">
-                TERZA <span className="text-terza-blue-bright font-light text-xs tracking-widest">IMPORTS</span>
-              </span>
+            <div className="mb-4">
+              <TerzaLogo
+                href="/"
+                textClassName="text-white font-bold text-lg tracking-wider"
+              />
             </div>
             <p className="text-terza-gray text-sm leading-relaxed">
               Tu marketplace de importaciones. Calidad global, precio justo.

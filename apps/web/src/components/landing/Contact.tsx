@@ -5,7 +5,7 @@ import { Phone, MapPin, MessageCircle, Send } from 'lucide-react'
 const WA_NUMBER = '5491170751477'
 
 export default function Contact() {
-  const [form, setForm] = useState({ nombre: '', empresa: '', mensaje: '' })
+  const [form, setForm] = useState({ nombre: '', email: '', empresa: '', mensaje: '' })
 
   const set = (k: keyof typeof form, v: string) => setForm(f => ({ ...f, [k]: v }))
 
@@ -14,6 +14,7 @@ export default function Contact() {
     const lines = [
       `Hola! Te escribo desde *terzaimports.com.ar*`,
       `*Nombre:* ${form.nombre}`,
+      `*Email:* ${form.email}`,
       form.empresa ? `*Empresa:* ${form.empresa}` : null,
       ``,
       form.mensaje,
@@ -90,16 +91,28 @@ export default function Contact() {
                   />
                 </div>
                 <div>
-                  <label className="text-terza-gray text-sm mb-1 block">Empresa</label>
+                  <label className="text-terza-gray text-sm mb-1 block">Email *</label>
                   <input
-                    type="text"
-                    placeholder="Tu empresa (opcional)"
-                    value={form.empresa}
-                    onChange={e => set('empresa', e.target.value)}
+                    type="email"
+                    required
+                    placeholder="tu@email.com"
+                    value={form.email}
+                    onChange={e => set('email', e.target.value)}
                     className="w-full bg-terza-navy border border-terza-gray-dark/50 rounded-lg px-4 py-3 text-white
                       placeholder-terza-gray/50 focus:outline-none focus:border-terza-blue transition-colors text-sm"
                   />
                 </div>
+              </div>
+              <div>
+                <label className="text-terza-gray text-sm mb-1 block">Empresa</label>
+                <input
+                  type="text"
+                  placeholder="Tu empresa (opcional)"
+                  value={form.empresa}
+                  onChange={e => set('empresa', e.target.value)}
+                  className="w-full bg-terza-navy border border-terza-gray-dark/50 rounded-lg px-4 py-3 text-white
+                    placeholder-terza-gray/50 focus:outline-none focus:border-terza-blue transition-colors text-sm"
+                />
               </div>
               <div>
                 <label className="text-terza-gray text-sm mb-1 block">¿Qué necesitás? *</label>

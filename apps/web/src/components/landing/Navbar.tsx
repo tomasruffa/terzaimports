@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { Menu, X } from 'lucide-react'
+import { TerzaLogo } from '@/components/brand/TerzaLogo'
 
 const links = [
   { label: 'Inicio', href: '#hero' },
@@ -21,18 +22,13 @@ export default function Navbar() {
   }, [])
 
   return (
-    <nav className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-      scrolled ? 'bg-terza-navy/95 backdrop-blur-md border-b border-terza-gray-dark/30 shadow-lg' : 'bg-transparent'
+    <nav className={`fixed top-0 left-0 right-0 z-[60] transition-all duration-300 ${
+      scrolled ? 'bg-terza-navy/95 backdrop-blur-md border-b border-terza-gray-dark/30 shadow-lg' : 'bg-gradient-to-b from-black/50 to-transparent'
     }`}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
-          <a href="#hero" className="flex items-center gap-3 group">
-            <div className="w-8 h-8 bg-blue-gradient rounded-full flex items-center justify-center text-white font-black text-sm">T</div>
-            <span className="text-white font-bold text-xl tracking-wider">
-              TERZA <span className="text-terza-blue-bright font-light text-sm tracking-widest">IMPORTS</span>
-            </span>
-          </a>
+          <TerzaLogo href="/" />
 
           {/* Desktop links */}
           <div className="hidden md:flex items-center gap-8">
