@@ -1,6 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import bcrypt from 'bcryptjs'
 import pg from 'pg'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -8,15 +9,12 @@ const dbDir = path.join(__dirname, '..', 'db')
 
 const files = ['schema.sql', 'seed.sql']
 
-async function main() {
+async function getClient() {
   const connectionString = process.env.DATABASE_URL
-  if (!connectionString) {
-    console.error('DATABASE_URL is required')
-    process.exit(1)
-  }
+  if (!connectionString) throw new Error('DATABASE_URL is required')
 
   const url = new URL(connectionString)
-  const client = new pg.Client({
+  return new pg.Client({
     host: url.hostname,
     port: Number(url.port || 5432),
     user: decodeURIComponent(url.username),
@@ -24,7 +22,10 @@ async function main() {
     database: url.pathname.replace(/^\//, ''),
     ssl: { rejectUnauthorized: false },
   })
+}
 
+async function main() {
+  const client = await getClient()
   await client.connect()
   console.log('Connected to PostgreSQL')
 
@@ -35,14 +36,6 @@ async function main() {
       await client.query(sql)
       console.log(`OK ${file}`)
     }
-
-    const { rows } = await client.query(
-      'SELECT sku, name, stock_quantity, active FROM products ORDER BY name'
-    )
-    console.log(`Products in database: ${rows.length}`)
-    rows.forEach(row => {
-      console.log(`- ${row.sku}: ${row.name} (stock ${row.stock_quantity})`)
-    })
   } finally {
     await client.end()
   }

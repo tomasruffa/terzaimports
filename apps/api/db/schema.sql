@@ -56,6 +56,18 @@ CREATE TABLE IF NOT EXISTS meli_tokens (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS users (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  email VARCHAR(255) UNIQUE NOT NULL,
+  password_hash TEXT NOT NULL,
+  name VARCHAR(255),
+  role VARCHAR(50) NOT NULL DEFAULT 'admin',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+
 CREATE INDEX IF NOT EXISTS idx_products_category ON products(category);
 CREATE INDEX IF NOT EXISTS idx_products_active ON products(active);
 CREATE INDEX IF NOT EXISTS idx_stock_movements_product ON stock_movements(product_id);
@@ -63,7 +75,7 @@ CREATE INDEX IF NOT EXISTS idx_stock_movements_type ON stock_movements(type);
 CREATE INDEX IF NOT EXISTS idx_stock_movements_date ON stock_movements(created_at);
 CREATE INDEX IF NOT EXISTS idx_expenses_category ON expenses(category);
 CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(expense_date);
-CREATE INDEX IF NOT EXISTS idx_expenses_created ON expenses(created_at);
+CREATE INDEX IF NOT EXISTS idx_meli_tokens_user ON meli_tokens(meli_user_id);
 
 CREATE OR REPLACE FUNCTION update_updated_at()
 RETURNS TRIGGER AS $$
@@ -86,4 +98,9 @@ CREATE TRIGGER expenses_updated_at
 DROP TRIGGER IF EXISTS meli_tokens_updated_at ON meli_tokens;
 CREATE TRIGGER meli_tokens_updated_at
   BEFORE UPDATE ON meli_tokens
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
+DROP TRIGGER IF EXISTS users_updated_at ON users;
+CREATE TRIGGER users_updated_at
+  BEFORE UPDATE ON users
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();

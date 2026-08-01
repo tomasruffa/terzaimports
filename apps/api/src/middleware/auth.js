@@ -1,6 +1,6 @@
-const { supabase } = require('../lib/supabase')
+const { verifyAccessToken } = require('../lib/jwt')
 
-function extractToken(req) {
+function getBearerToken(req) {
   const authHeader = req.headers.authorization
   if (authHeader?.startsWith('Bearer ')) {
     return authHeader.slice(7)
@@ -8,17 +8,23 @@ function extractToken(req) {
   return null
 }
 
-module.exports = async function requireAuth(req, res, next) {
-  const token = extractToken(req)
+async function requireAuth(req, res, next) {
+  const token = getBearerToken(req)
   if (!token) {
     return res.status(401).json({ data: null, error: 'No autorizado' })
   }
-  const { data: { user }, error } = await supabase.auth.getUser(token)
 
-  if (error || !user) {
+  try {
+    const payload = verifyAccessToken(token)
+    req.user = {
+      id: payload.sub,
+      email: payload.email,
+      role: payload.role,
+    }
+    next()
+  } catch {
     return res.status(401).json({ data: null, error: 'Token inválido o expirado' })
   }
-
-  req.user = user
-  next()
 }
+
+module.exports = requireAuth

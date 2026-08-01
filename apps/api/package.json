@@ -8,16 +8,18 @@
     "dev": "nodemon src/index.js",
     "start": "node src/index.js",
     "db:migrate": "node scripts/migrate.mjs",
+    "db:seed-admin": "node scripts/seed-admin.mjs",
     "lint": "echo 'No lint'"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.39.0",
+    "@aws-sdk/client-s3": "^3.750.0",
+    "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.0",
     "express": "^4.18.2",
+    "jsonwebtoken": "^9.0.2",
     "multer": "^1.4.5-lts.1",
-    "pg": "^8.22.0",
-    "ws": "^8.21.0"
+    "pg": "^8.22.0"
   },
   "devDependencies": {
     "nodemon": "^3.0.3"

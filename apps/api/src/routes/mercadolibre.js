@@ -1,4 +1,5 @@
 const express = require('express')
+const { query } = require('../lib/db')
 
 const router = express.Router()
 
@@ -131,7 +132,24 @@ router.get('/callback', async (req, res) => {
       expires_in: tokenJson.expires_in,
     })
 
-    // TODO: persistir refresh_token en DB (migración Railway Postgres)
+    const meliUserId = me?.id ?? tokenJson.user_id
+    const expiresAt = tokenJson.expires_in
+      ? new Date(Date.now() + Number(tokenJson.expires_in) * 1000).toISOString()
+      : null
+
+    await query('DELETE FROM meli_tokens WHERE meli_user_id = $1', [meliUserId])
+    await query(
+      `INSERT INTO meli_tokens (meli_user_id, access_token, refresh_token, expires_at, scope)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [
+        meliUserId,
+        tokenJson.access_token,
+        tokenJson.refresh_token,
+        expiresAt,
+        tokenJson.scope ?? null,
+      ]
+    )
+
     res.json({
       ok: true,
       message: 'Cuenta de Mercado Libre vinculada correctamente.',

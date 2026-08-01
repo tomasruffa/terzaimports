@@ -1,5 +1,7 @@
 const express = require('express')
-const { supabase } = require('../lib/supabase')
+const bcrypt = require('bcryptjs')
+const { query } = require('../lib/db')
+const { signAccessToken } = require('../lib/jwt')
 const requireAuth = require('../middleware/auth')
 
 const router = express.Router()
@@ -11,20 +13,31 @@ router.post('/login', async (req, res) => {
     return res.status(400).json({ data: null, error: 'Email y contraseña requeridos' })
   }
 
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+  try {
+    const { rows } = await query(
+      'SELECT id, email, password_hash, role FROM users WHERE email = $1',
+      [email.toLowerCase().trim()]
+    )
+    const user = rows[0]
 
-  if (error || !data.session) {
-    return res.status(401).json({ data: null, error: error?.message ?? 'Credenciales inválidas' })
+    if (!user || !(await bcrypt.compare(password, user.password_hash))) {
+      return res.status(401).json({ data: null, error: 'Credenciales inválidas' })
+    }
+
+    const accessToken = signAccessToken(user)
+
+    res.json({
+      data: {
+        user: { id: user.id, email: user.email },
+        access_token: accessToken,
+        refresh_token: null,
+      },
+      error: null,
+    })
+  } catch (err) {
+    console.error('[auth/login]', err)
+    res.status(500).json({ data: null, error: 'Error al iniciar sesión' })
   }
-
-  res.json({
-    data: {
-      user: { id: data.user.id, email: data.user.email },
-      access_token: data.session.access_token,
-      refresh_token: data.session.refresh_token,
-    },
-    error: null,
-  })
 })
 
 router.post('/logout', (_req, res) => {

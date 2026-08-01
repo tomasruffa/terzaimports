@@ -1,90 +1,159 @@
 const express = require('express')
-const { supabase } = require('../lib/supabase')
+const { query } = require('../lib/db')
+
 const router = express.Router()
 
-// GET /expenses - listar gastos
+const EXPENSE_FIELDS = [
+  'category',
+  'description',
+  'amount',
+  'payment_method',
+  'receipt_url',
+  'notes',
+  'expense_date',
+]
+
+function pickExpenseFields(body) {
+  const data = {}
+  for (const key of EXPENSE_FIELDS) {
+    if (body[key] !== undefined) data[key] = body[key]
+  }
+  return data
+}
+
 router.get('/', async (req, res) => {
   const { category, start_date, end_date, page = 1, limit = 20 } = req.query
-  const offset = (page - 1) * limit
+  const pageNum = Math.max(1, Number(page) || 1)
+  const limitNum = Math.min(100, Math.max(1, Number(limit) || 20))
+  const offset = (pageNum - 1) * limitNum
 
-  let query = supabase
-    .from('expenses')
-    .select('*', { count: 'exact' })
-    .order('expense_date', { ascending: false })
-    .range(offset, offset + limit - 1)
+  const conditions = []
+  const params = []
 
-  if (category) query = query.eq('category', category)
-  if (start_date) query = query.gte('expense_date', start_date)
-  if (end_date) query = query.lte('expense_date', end_date)
+  if (category) {
+    params.push(category)
+    conditions.push(`category = $${params.length}`)
+  }
+  if (start_date) {
+    params.push(start_date)
+    conditions.push(`expense_date >= $${params.length}`)
+  }
+  if (end_date) {
+    params.push(end_date)
+    conditions.push(`expense_date <= $${params.length}`)
+  }
 
-  const { data, error, count } = await query
-  if (error) return res.status(500).json({ data: null, error: error.message })
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
 
-  res.json({ data, error: null, total: count, page: Number(page), limit: Number(limit) })
+  try {
+    const countResult = await query(`SELECT COUNT(*)::int AS total FROM expenses ${where}`, params)
+    const { rows } = await query(
+      `SELECT * FROM expenses ${where} ORDER BY expense_date DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+      [...params, limitNum, offset]
+    )
+
+    res.json({
+      data: rows,
+      error: null,
+      total: countResult.rows[0].total,
+      page: pageNum,
+      limit: limitNum,
+    })
+  } catch (err) {
+    res.status(500).json({ data: null, error: err.message })
+  }
 })
 
-// GET /expenses/summary - resumen de gastos
 router.get('/summary', async (req, res) => {
   const { start_date, end_date } = req.query
+  const conditions = []
+  const params = []
 
-  let query = supabase
-    .from('expenses')
-    .select('category, amount')
+  if (start_date) {
+    params.push(start_date)
+    conditions.push(`expense_date >= $${params.length}`)
+  }
+  if (end_date) {
+    params.push(end_date)
+    conditions.push(`expense_date <= $${params.length}`)
+  }
 
-  if (start_date) query = query.gte('expense_date', start_date)
-  if (end_date) query = query.lte('expense_date', end_date)
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
 
-  const { data, error } = await query
+  try {
+    const { rows } = await query(`SELECT category, amount FROM expenses ${where}`, params)
+    const summary = {}
+    let total = 0
+    rows.forEach(e => {
+      summary[e.category] = (summary[e.category] || 0) + Number(e.amount)
+      total += Number(e.amount)
+    })
 
-  if (error) return res.status(500).json({ data: null, error: error.message })
-
-  const summary = {}
-  let total = 0
-  data.forEach(e => {
-    summary[e.category] = (summary[e.category] || 0) + e.amount
-    total += e.amount
-  })
-
-  res.json({
-    data: { categories: summary, total, count: data.length },
-    error: null
-  })
+    res.json({
+      data: { categories: summary, total, count: rows.length },
+      error: null,
+    })
+  } catch (err) {
+    res.status(500).json({ data: null, error: err.message })
+  }
 })
 
-// POST /expenses - crear gasto
 router.post('/', async (req, res) => {
-  const { data, error } = await supabase
-    .from('expenses')
-    .insert(req.body)
-    .select()
-    .single()
+  const data = pickExpenseFields(req.body)
+  const keys = Object.keys(data)
+  if (!keys.length) {
+    return res.status(400).json({ data: null, error: 'Sin datos para crear gasto' })
+  }
 
-  if (error) return res.status(400).json({ data: null, error: error.message })
-  res.status(201).json({ data, error: null, message: 'Gasto registrado exitosamente' })
+  const cols = keys.join(', ')
+  const placeholders = keys.map((_, i) => `$${i + 1}`).join(', ')
+  const values = keys.map(k => data[k])
+
+  try {
+    const { rows } = await query(
+      `INSERT INTO expenses (${cols}) VALUES (${placeholders}) RETURNING *`,
+      values
+    )
+    res.status(201).json({ data: rows[0], error: null, message: 'Gasto registrado exitosamente' })
+  } catch (err) {
+    res.status(400).json({ data: null, error: err.message })
+  }
 })
 
-// PUT /expenses/:id - actualizar gasto
 router.put('/:id', async (req, res) => {
-  const { data, error } = await supabase
-    .from('expenses')
-    .update({ ...req.body, updated_at: new Date().toISOString() })
-    .eq('id', req.params.id)
-    .select()
-    .single()
+  const data = pickExpenseFields(req.body)
+  const keys = Object.keys(data)
+  if (!keys.length) {
+    return res.status(400).json({ data: null, error: 'Sin datos para actualizar' })
+  }
 
-  if (error) return res.status(400).json({ data: null, error: error.message })
-  res.json({ data, error: null, message: 'Gasto actualizado exitosamente' })
+  const sets = keys.map((key, i) => `${key} = $${i + 1}`)
+  const values = keys.map(k => data[k])
+
+  try {
+    const { rows } = await query(
+      `UPDATE expenses SET ${sets.join(', ')}, updated_at = NOW() WHERE id = $${keys.length + 1} RETURNING *`,
+      [...values, req.params.id]
+    )
+    if (!rows[0]) {
+      return res.status(404).json({ data: null, error: 'Gasto no encontrado' })
+    }
+    res.json({ data: rows[0], error: null, message: 'Gasto actualizado exitosamente' })
+  } catch (err) {
+    res.status(400).json({ data: null, error: err.message })
+  }
 })
 
-// DELETE /expenses/:id - eliminar gasto
 router.delete('/:id', async (req, res) => {
-  const { error } = await supabase
-    .from('expenses')
-    .delete()
-    .eq('id', req.params.id)
-
-  if (error) return res.status(400).json({ data: null, error: error.message })
-  res.json({ data: null, error: null, message: 'Gasto eliminado exitosamente' })
+  try {
+    const { rowCount } = await query('DELETE FROM expenses WHERE id = $1', [req.params.id])
+    if (!rowCount) {
+      return res.status(404).json({ data: null, error: 'Gasto no encontrado' })
+    }
+    res.json({ data: null, error: null, message: 'Gasto eliminado exitosamente' })
+  } catch (err) {
+    res.status(400).json({ data: null, error: err.message })
+  }
 })
 
 module.exports = router

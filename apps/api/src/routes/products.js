@@ -1,6 +1,6 @@
 const express = require('express')
 const multer = require('multer')
-const { supabase } = require('../lib/supabase')
+const { query } = require('../lib/db')
 const { uploadProductImage } = require('../lib/storage')
 const requireAuth = require('../middleware/auth')
 
@@ -15,28 +15,75 @@ const upload = multer({
 
 const router = express.Router()
 
-// GET /products
+const PRODUCT_FIELDS = [
+  'name',
+  'sku',
+  'description',
+  'category',
+  'purchase_price',
+  'sale_price',
+  'stock_quantity',
+  'min_stock',
+  'unit',
+  'supplier',
+  'origin_country',
+  'image_url',
+  'images',
+  'active',
+]
+
+function pickProductFields(body) {
+  const data = {}
+  for (const key of PRODUCT_FIELDS) {
+    if (body[key] !== undefined) data[key] = body[key]
+  }
+  return data
+}
+
 router.get('/', async (req, res) => {
   const { category, active, search, page = 1, limit = 20 } = req.query
-  const offset = (page - 1) * limit
+  const pageNum = Math.max(1, Number(page) || 1)
+  const limitNum = Math.min(100, Math.max(1, Number(limit) || 20))
+  const offset = (pageNum - 1) * limitNum
 
-  let query = supabase
-    .from('products')
-    .select('*', { count: 'exact' })
-    .order('created_at', { ascending: false })
-    .range(offset, offset + limit - 1)
+  const conditions = []
+  const params = []
 
-  if (active !== undefined) query = query.eq('active', active === 'true')
-  if (category) query = query.eq('category', category)
-  if (search) query = query.ilike('name', `%${search}%`)
+  if (active !== undefined) {
+    params.push(active === 'true')
+    conditions.push(`active = $${params.length}`)
+  }
+  if (category) {
+    params.push(category)
+    conditions.push(`category = $${params.length}`)
+  }
+  if (search) {
+    params.push(`%${search}%`)
+    conditions.push(`name ILIKE $${params.length}`)
+  }
 
-  const { data, error, count } = await query
-  if (error) return res.status(500).json({ data: null, error: error.message })
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
 
-  res.json({ data, error: null, total: count, page: Number(page), limit: Number(limit) })
+  try {
+    const countResult = await query(`SELECT COUNT(*)::int AS total FROM products ${where}`, params)
+    const { rows } = await query(
+      `SELECT * FROM products ${where} ORDER BY created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+      [...params, limitNum, offset]
+    )
+
+    res.json({
+      data: rows,
+      error: null,
+      total: countResult.rows[0].total,
+      page: pageNum,
+      limit: limitNum,
+    })
+  } catch (err) {
+    console.error('[products/list]', err)
+    res.status(500).json({ data: null, error: err.message })
+  }
 })
 
-// POST /products/upload
 router.post('/upload', requireAuth, upload.single('file'), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ data: null, error: 'Archivo requerido' })
@@ -55,52 +102,77 @@ router.post('/upload', requireAuth, upload.single('file'), async (req, res) => {
   }
 })
 
-// GET /products/:id
 router.get('/:id', async (req, res) => {
-  const { data, error } = await supabase
-    .from('products')
-    .select('*')
-    .eq('id', req.params.id)
-    .single()
-
-  if (error) return res.status(404).json({ data: null, error: 'Producto no encontrado' })
-  res.json({ data, error: null })
+  try {
+    const { rows } = await query('SELECT * FROM products WHERE id = $1', [req.params.id])
+    if (!rows[0]) {
+      return res.status(404).json({ data: null, error: 'Producto no encontrado' })
+    }
+    res.json({ data: rows[0], error: null })
+  } catch (err) {
+    res.status(500).json({ data: null, error: err.message })
+  }
 })
 
-// POST /products
 router.post('/', requireAuth, async (req, res) => {
-  const { data, error } = await supabase
-    .from('products')
-    .insert(req.body)
-    .select()
-    .single()
+  const data = pickProductFields(req.body)
+  const keys = Object.keys(data)
+  if (!keys.length) {
+    return res.status(400).json({ data: null, error: 'Sin datos para crear producto' })
+  }
 
-  if (error) return res.status(400).json({ data: null, error: error.message })
-  res.status(201).json({ data, error: null, message: 'Producto creado exitosamente' })
+  const cols = keys.join(', ')
+  const placeholders = keys.map((_, i) => `$${i + 1}`).join(', ')
+  const values = keys.map(k => data[k])
+
+  try {
+    const { rows } = await query(
+      `INSERT INTO products (${cols}) VALUES (${placeholders}) RETURNING *`,
+      values
+    )
+    res.status(201).json({ data: rows[0], error: null, message: 'Producto creado exitosamente' })
+  } catch (err) {
+    res.status(400).json({ data: null, error: err.message })
+  }
 })
 
-// PUT /products/:id
 router.put('/:id', requireAuth, async (req, res) => {
-  const { data, error } = await supabase
-    .from('products')
-    .update({ ...req.body, updated_at: new Date().toISOString() })
-    .eq('id', req.params.id)
-    .select()
-    .single()
+  const data = pickProductFields(req.body)
+  const keys = Object.keys(data)
+  if (!keys.length) {
+    return res.status(400).json({ data: null, error: 'Sin datos para actualizar' })
+  }
 
-  if (error) return res.status(400).json({ data: null, error: error.message })
-  res.json({ data, error: null, message: 'Producto actualizado exitosamente' })
+  const sets = keys.map((key, i) => `${key} = $${i + 1}`)
+  const values = keys.map(k => data[k])
+
+  try {
+    const { rows } = await query(
+      `UPDATE products SET ${sets.join(', ')}, updated_at = NOW() WHERE id = $${keys.length + 1} RETURNING *`,
+      [...values, req.params.id]
+    )
+    if (!rows[0]) {
+      return res.status(404).json({ data: null, error: 'Producto no encontrado' })
+    }
+    res.json({ data: rows[0], error: null, message: 'Producto actualizado exitosamente' })
+  } catch (err) {
+    res.status(400).json({ data: null, error: err.message })
+  }
 })
 
-// DELETE /products/:id
 router.delete('/:id', requireAuth, async (req, res) => {
-  const { error } = await supabase
-    .from('products')
-    .update({ active: false })
-    .eq('id', req.params.id)
-
-  if (error) return res.status(400).json({ data: null, error: error.message })
-  res.json({ data: null, error: null, message: 'Producto desactivado exitosamente' })
+  try {
+    const { rowCount } = await query(
+      'UPDATE products SET active = false, updated_at = NOW() WHERE id = $1',
+      [req.params.id]
+    )
+    if (!rowCount) {
+      return res.status(404).json({ data: null, error: 'Producto no encontrado' })
+    }
+    res.json({ data: null, error: null, message: 'Producto desactivado exitosamente' })
+  } catch (err) {
+    res.status(400).json({ data: null, error: err.message })
+  }
 })
 
 module.exports = router

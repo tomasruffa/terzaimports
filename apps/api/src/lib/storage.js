@@ -1,30 +1,55 @@
-const { supabase } = require('./supabase')
+const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3')
 
-const BUCKET = 'products'
+let s3Client
 
-async function ensureBucket() {
-  const { data: buckets } = await supabase.storage.listBuckets()
-  const exists = buckets?.some(b => b.name === BUCKET)
-  if (!exists) {
-    await supabase.storage.createBucket(BUCKET, { public: true })
+function getS3Client() {
+  if (!s3Client) {
+    const endpoint = process.env.S3_ENDPOINT
+    const accessKeyId = process.env.S3_ACCESS_KEY_ID
+    const secretAccessKey = process.env.S3_SECRET_ACCESS_KEY
+
+    if (!endpoint || !accessKeyId || !secretAccessKey || !process.env.S3_BUCKET) {
+      throw new Error('Configurá S3_ENDPOINT, S3_BUCKET, S3_ACCESS_KEY_ID y S3_SECRET_ACCESS_KEY')
+    }
+
+    s3Client = new S3Client({
+      endpoint,
+      region: process.env.S3_REGION || 'auto',
+      credentials: { accessKeyId, secretAccessKey },
+      forcePathStyle: process.env.S3_FORCE_PATH_STYLE === 'true',
+    })
   }
+  return s3Client
+}
+
+function getPublicUrl(key) {
+  if (process.env.S3_PUBLIC_URL) {
+    return `${process.env.S3_PUBLIC_URL.replace(/\/$/, '')}/${key}`
+  }
+
+  const bucket = process.env.S3_BUCKET
+  const endpoint = process.env.S3_ENDPOINT?.replace(/^https?:\/\//, '')
+  if (process.env.S3_URL_STYLE === 'path') {
+    return `https://${endpoint}/${bucket}/${key}`
+  }
+  return `https://${bucket}.${endpoint}/${key}`
 }
 
 async function uploadProductImage(file, sku) {
-  await ensureBucket()
-
   const ext = file.originalname.split('.').pop()?.toLowerCase() ?? 'jpg'
   const safeSku = sku.replace(/[^a-zA-Z0-9-_]/g, '-').toLowerCase()
-  const filename = `${safeSku}-${Date.now()}.${ext}`
+  const key = `products/${safeSku}-${Date.now()}.${ext}`
 
-  const { error } = await supabase.storage
-    .from(BUCKET)
-    .upload(filename, file.buffer, { upsert: true, contentType: file.mimetype })
+  await getS3Client().send(
+    new PutObjectCommand({
+      Bucket: process.env.S3_BUCKET,
+      Key: key,
+      Body: file.buffer,
+      ContentType: file.mimetype,
+    })
+  )
 
-  if (error) throw new Error(error.message)
-
-  const { data } = supabase.storage.from(BUCKET).getPublicUrl(filename)
-  return data.publicUrl
+  return getPublicUrl(key)
 }
 
 module.exports = { uploadProductImage }

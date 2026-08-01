@@ -3,7 +3,8 @@ const nextConfig = {
   output: 'standalone',
   images: {
     remotePatterns: [
-      { protocol: 'https', hostname: '*.supabase.co' },
+      { protocol: 'https', hostname: '*.t3.storageapi.dev' },
+      { protocol: 'https', hostname: 'terzaimports.com.ar' },
     ],
   },
   transpilePackages: ['@terza/shared'],

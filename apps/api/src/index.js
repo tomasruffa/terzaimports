@@ -22,12 +22,25 @@ console.log(`[startup] PORT=${process.env.PORT ?? '(unset)'} API_PORT=${process.
 console.log(`[startup] CORS allowed origins: ${allowedOrigins.join(', ')}`)
 
 // Healthcheck primero — Railway valida esto antes de marcar el deploy como OK
-app.get('/health', (_req, res) => {
-  res.status(200).json({
-    status: 'ok',
-    service: 'Terza Imports API',
-    timestamp: new Date().toISOString(),
-  })
+app.get('/health', async (_req, res) => {
+  try {
+    const { query } = require('./lib/db')
+    await query('SELECT 1')
+    res.status(200).json({
+      status: 'ok',
+      service: 'Terza Imports API',
+      database: 'connected',
+      timestamp: new Date().toISOString(),
+    })
+  } catch (err) {
+    console.error('[health] database check failed', err.message)
+    res.status(503).json({
+      status: 'degraded',
+      service: 'Terza Imports API',
+      database: 'disconnected',
+      timestamp: new Date().toISOString(),
+    })
+  }
 })
 
 app.get('/', (_req, res) => {
