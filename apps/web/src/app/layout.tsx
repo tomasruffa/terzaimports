@@ -1,4 +1,6 @@
 import type { Metadata } from 'next'
+import { Suspense } from 'react'
+import FirebaseAnalytics from '@/components/analytics/FirebaseAnalytics'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -23,7 +25,12 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="es">
-      <body className="overflow-x-hidden">{children}</body>
+      <body className="overflow-x-hidden">
+        <Suspense fallback={null}>
+          <FirebaseAnalytics />
+        </Suspense>
+        {children}
+      </body>
     </html>
   )
 }
