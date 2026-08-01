@@ -1,4 +1,7 @@
-const { Pool } = require('pg')
+const { Pool, types } = require('pg')
+
+// PostgreSQL devuelve DECIMAL/NUMERIC como string; normalizar a number.
+types.setTypeParser(1700, val => (val === null ? null : parseFloat(val)))
 
 let pool
 
