@@ -16,23 +16,26 @@ function getS3Client() {
       endpoint,
       region: process.env.S3_REGION || 'auto',
       credentials: { accessKeyId, secretAccessKey },
-      forcePathStyle: process.env.S3_FORCE_PATH_STYLE === 'true',
+      forcePathStyle:
+        process.env.S3_FORCE_PATH_STYLE === 'true' ||
+        endpoint.includes('storageapi.dev') ||
+        endpoint.includes('railway.app'),
     })
   }
   return s3Client
 }
 
 function getPublicUrl(key) {
-  if (process.env.S3_PUBLIC_URL) {
-    return `${process.env.S3_PUBLIC_URL.replace(/\/$/, '')}/${key}`
+  const apiBase = (
+    process.env.API_PUBLIC_URL ||
+    (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : '')
+  ).replace(/\/$/, '')
+
+  if (apiBase) {
+    return `${apiBase}/api/storage/${key}`
   }
 
-  const bucket = process.env.S3_BUCKET
-  const endpoint = process.env.S3_ENDPOINT?.replace(/^https?:\/\//, '')
-  if (process.env.S3_URL_STYLE === 'path') {
-    return `https://${endpoint}/${bucket}/${key}`
-  }
-  return `https://${bucket}.${endpoint}/${key}`
+  return `/api/storage/${key}`
 }
 
 async function uploadProductImage(file, sku) {
@@ -52,4 +55,4 @@ async function uploadProductImage(file, sku) {
   return getPublicUrl(key)
 }
 
-module.exports = { uploadProductImage }
+module.exports = { getS3Client, uploadProductImage, getPublicUrl }

@@ -1,7 +1,7 @@
 const express = require('express')
 const multer = require('multer')
 const { query } = require('../lib/db')
-const { uploadProductImage } = require('../lib/storage')
+const { uploadProductImage, getPublicUrl } = require('../lib/storage')
 const requireAuth = require('../middleware/auth')
 
 const upload = multer({
@@ -13,7 +13,28 @@ const upload = multer({
   },
 })
 
-const router = express.Router()
+function normalizeImageUrl(url) {
+  if (!url) return url
+
+  const t3Match = url.match(/t3\.storageapi\.dev\/(.+)$/)
+  if (t3Match) return getPublicUrl(t3Match[1])
+
+  if (url.startsWith('/products/')) {
+    const webBase = process.env.WEB_PUBLIC_URL || 'https://www.terzaimports.com.ar'
+    return `${webBase.replace(/\/$/, '')}${url}`
+  }
+
+  return url
+}
+
+function normalizeProduct(row) {
+  if (!row) return row
+  return {
+    ...row,
+    image_url: normalizeImageUrl(row.image_url),
+    images: Array.isArray(row.images) ? row.images.map(normalizeImageUrl) : row.images,
+  }
+}
 
 const PRODUCT_FIELDS = [
   'name',
@@ -39,6 +60,8 @@ function pickProductFields(body) {
   }
   return data
 }
+
+const router = express.Router()
 
 router.get('/', async (req, res) => {
   const { category, active, search, page = 1, limit = 20 } = req.query
@@ -72,7 +95,7 @@ router.get('/', async (req, res) => {
     )
 
     res.json({
-      data: rows,
+      data: rows.map(normalizeProduct),
       error: null,
       total: countResult.rows[0].total,
       page: pageNum,
@@ -108,7 +131,7 @@ router.get('/:id', async (req, res) => {
     if (!rows[0]) {
       return res.status(404).json({ data: null, error: 'Producto no encontrado' })
     }
-    res.json({ data: rows[0], error: null })
+    res.json({ data: normalizeProduct(rows[0]), error: null })
   } catch (err) {
     res.status(500).json({ data: null, error: err.message })
   }
