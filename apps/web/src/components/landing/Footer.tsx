@@ -22,11 +22,11 @@ export default function Footer() {
             <h4 className="text-white font-semibold mb-4">Navegación</h4>
             <ul className="space-y-2">
               {[
-                { label: 'Inicio', href: '#hero' },
-                { label: 'Nosotros', href: '#nosotros' },
-                { label: 'Productos', href: '#productos' },
-                { label: 'Servicios', href: '#servicios' },
-                { label: 'Contacto', href: '#contacto' },
+                { label: 'Inicio', href: '/#hero' },
+                { label: 'Nosotros', href: '/#nosotros' },
+                { label: 'Productos', href: '/#productos' },
+                { label: 'Servicios', href: '/#servicios' },
+                { label: 'Contacto', href: '/#contacto' },
               ].map(item => (
                 <li key={item.label}>
                   <a href={item.href}

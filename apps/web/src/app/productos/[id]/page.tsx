@@ -42,66 +42,70 @@ export default async function ProductPage({ params }: Props) {
   const inStock = product.stock_quantity > 0
 
   return (
-    <main className="min-h-screen bg-gray-50">
+    <main className="min-h-screen overflow-x-hidden bg-gray-50">
       <Navbar />
 
-      <article className="pt-20 pb-16">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+      <article className="pt-20 pb-12 sm:pb-16">
+        <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
           <Link
             href="/#productos"
-            className="mb-8 inline-flex items-center gap-2 text-sm font-medium text-gray-600 transition-colors hover:text-terza-blue"
+            className="mb-6 inline-flex items-center gap-2 text-sm font-medium text-gray-600 transition-colors hover:text-terza-blue sm:mb-8"
           >
             <ArrowLeft size={18} />
             Volver al catálogo
           </Link>
 
-          <div className="grid gap-10 lg:grid-cols-2 lg:gap-16 lg:items-start">
-            <ProductGallery images={images} productName={product.name} />
+          <div className="grid min-w-0 grid-cols-1 gap-8 sm:gap-10 lg:grid-cols-2 lg:gap-16 lg:items-start">
+            <div className="min-w-0 w-full">
+              <ProductGallery images={images} productName={product.name} />
+            </div>
 
-            <div className="flex flex-col lg:sticky lg:top-24">
+            <div className="flex min-w-0 w-full flex-col lg:sticky lg:top-24">
               <span
-                className={`mb-4 inline-flex w-fit rounded-full px-3 py-1 text-xs font-semibold ${
+                className={`mb-3 inline-flex w-fit rounded-full px-3 py-1 text-xs font-semibold sm:mb-4 ${
                   inStock ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
                 }`}
               >
                 {inStock ? 'En stock' : 'Sin stock'}
               </span>
 
-              <h1 className="text-3xl font-black tracking-tight text-gray-900 sm:text-4xl lg:text-5xl">
+              <h1 className="break-words text-2xl font-black tracking-tight text-gray-900 sm:text-3xl md:text-4xl lg:text-5xl">
                 {product.name}
               </h1>
 
-              <div className="mt-6 border-b border-gray-200 pb-6">
+              <div className="mt-4 border-b border-gray-200 pb-4 sm:mt-6 sm:pb-6">
                 {product.sale_price > 0 ? (
-                  <p className="text-4xl font-black text-gray-900">
+                  <p className="text-3xl font-black text-gray-900 sm:text-4xl">
                     ${product.sale_price.toLocaleString('es-AR', { minimumFractionDigits: 0 })}
                   </p>
                 ) : (
-                  <p className="text-xl font-semibold text-terza-blue">Precio a consultar</p>
+                  <p className="text-lg font-semibold text-terza-blue sm:text-xl">
+                    Precio a consultar
+                  </p>
                 )}
               </div>
 
-              <p className="mt-6 text-base leading-relaxed text-gray-600 sm:text-lg">
+              <p className="mt-4 text-sm leading-relaxed text-gray-600 sm:mt-6 sm:text-base md:text-lg">
                 {product.description}
               </p>
 
               {product.highlights && product.highlights.length > 0 && (
-                <ul className="mt-6 space-y-2">
+                <ul className="mt-4 space-y-2 sm:mt-6">
                   {product.highlights.map(item => (
                     <li
                       key={item}
                       className="flex items-start gap-2 text-sm text-gray-700 sm:text-base"
                     >
                       <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-terza-blue" />
-                      {item}
+                      <span className="min-w-0 break-words">{item}</span>
                     </li>
                   ))}
                 </ul>
               )}
 
               {product.youtubeId && (
-                <div className="mt-8 overflow-hidden rounded-2xl border border-gray-200 bg-black shadow-sm">
-                  <div className="relative aspect-video">
+                <div className="mt-6 w-full max-w-full overflow-hidden rounded-2xl border border-gray-200 bg-black shadow-sm sm:mt-8">
+                  <div className="relative aspect-video w-full">
                     <iframe
                       src={`https://www.youtube.com/embed/${product.youtubeId}?rel=0`}
                       title={`Video de ${product.name}`}
@@ -113,19 +117,19 @@ export default async function ProductPage({ params }: Props) {
                 </div>
               )}
 
-              <div className="mt-10 flex flex-col gap-3 sm:flex-row">
+              <div className="mt-8 flex w-full flex-col gap-3 sm:mt-10 sm:flex-row">
                 <a
                   href={whatsAppHref(product.name)}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-green-600 px-8 py-4 text-base font-semibold text-white shadow-lg transition-colors hover:bg-green-500"
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-green-600 px-6 py-3.5 text-base font-semibold text-white shadow-lg transition-colors hover:bg-green-500 sm:w-auto sm:px-8 sm:py-4"
                 >
                   <MessageCircle size={20} />
                   Consultar por WhatsApp
                 </a>
                 <Link
                   href="/#contacto"
-                  className="inline-flex items-center justify-center rounded-xl border border-gray-300 bg-white px-8 py-4 text-base font-semibold text-gray-800 transition-colors hover:bg-gray-50"
+                  className="inline-flex w-full items-center justify-center rounded-xl border border-gray-300 bg-white px-6 py-3.5 text-base font-semibold text-gray-800 transition-colors hover:bg-gray-50 sm:w-auto sm:px-8 sm:py-4"
                 >
                   Contacto
                 </Link>

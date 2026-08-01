@@ -35,21 +35,14 @@ function SlideMedia({ slide, isActive }: { slide: HeroSlide; isActive: boolean }
           <iframe
             title={slide.title}
             src={youtubeEmbedSrc(slide.youtubeId)}
-            className="absolute top-1/2 left-1/2 h-[130%] w-[230%] max-w-none -translate-x-1/2 -translate-y-[48%] pointer-events-none border-0"
+            className="pointer-events-none absolute left-1/2 top-1/2 w-screen max-w-none -translate-x-1/2 -translate-y-1/2 border-0
+              h-[56.25vw] min-h-full min-w-[177.78vh]"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
             referrerPolicy="strict-origin-when-cross-origin"
             tabIndex={-1}
           />
         )}
-        {/* Oculta logo y controles residuales de YouTube en los bordes */}
-        <div
-          className="pointer-events-none absolute inset-x-0 bottom-0 z-[1] h-16 bg-gradient-to-t from-black/80 to-transparent"
-          aria-hidden
-        />
-        <div
-          className="pointer-events-none absolute right-0 bottom-0 z-[1] h-20 w-28 bg-gradient-to-tl from-black/90 to-transparent"
-          aria-hidden
-        />
+        <div className="pointer-events-none absolute inset-0 z-[1] cursor-default" aria-hidden />
       </div>
     )
   }

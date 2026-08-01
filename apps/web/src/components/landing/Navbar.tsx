@@ -4,11 +4,11 @@ import { Menu, X } from 'lucide-react'
 import { TerzaLogo } from '@/components/brand/TerzaLogo'
 
 const links = [
-  { label: 'Inicio', href: '#hero' },
-  { label: 'Nosotros', href: '#nosotros' },
-  { label: 'Productos', href: '#productos' },
-  { label: 'Servicios', href: '#servicios' },
-  { label: 'Contacto', href: '#contacto' },
+  { label: 'Inicio', href: '/#hero' },
+  { label: 'Nosotros', href: '/#nosotros' },
+  { label: 'Productos', href: '/#productos' },
+  { label: 'Servicios', href: '/#servicios' },
+  { label: 'Contacto', href: '/#contacto' },
 ]
 
 export default function Navbar() {

@@ -9,7 +9,17 @@ type Props = {
   productName: string
 }
 
-function GalleryImage({ src, alt, className, priority }: { src: string; alt: string; className: string; priority?: boolean }) {
+function GalleryImage({
+  src,
+  alt,
+  className,
+  priority,
+}: {
+  src: string
+  alt: string
+  className: string
+  priority?: boolean
+}) {
   if (isAnimatedAsset(src)) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
@@ -23,7 +33,7 @@ function GalleryImage({ src, alt, className, priority }: { src: string; alt: str
       alt={alt}
       fill
       className={className}
-      sizes="(max-width: 768px) 100vw, 55vw"
+      sizes="(max-width: 640px) 100vw, (max-width: 1024px) 90vw, 50vw"
       priority={priority}
     />
   )
@@ -35,42 +45,46 @@ export default function ProductGallery({ images, productName }: Props) {
 
   if (!current) {
     return (
-      <div className="flex aspect-[4/5] w-full items-center justify-center rounded-2xl bg-gray-100 text-gray-400">
+      <div className="flex aspect-square w-full max-w-full items-center justify-center rounded-2xl bg-gray-100 text-gray-400">
         Sin imagen
       </div>
     )
   }
 
-  const mainClass = 'object-contain object-center p-4 h-full w-full'
+  const mainClass = 'h-full w-full object-contain object-center p-3 sm:p-4'
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="relative aspect-[4/5] w-full overflow-hidden rounded-2xl bg-neutral-50 shadow-lg md:aspect-square md:min-h-[min(70vh,720px)]">
-        {isAnimatedAsset(current) ? (
+    <div className="flex min-w-0 w-full max-w-full flex-col gap-3 sm:gap-4">
+      <div className="relative mx-auto aspect-square w-full max-w-full overflow-hidden rounded-2xl bg-neutral-50 shadow-lg sm:max-h-[min(72vh,640px)] sm:aspect-[4/3] lg:aspect-square lg:max-h-[min(70vh,720px)]">
+        <div className="relative h-full w-full">
           <GalleryImage src={current} alt={productName} className={mainClass} priority />
-        ) : (
-          <div className="relative h-full w-full">
-            <GalleryImage src={current} alt={productName} className={mainClass} priority />
-          </div>
-        )}
+        </div>
       </div>
 
       {images.length > 1 && (
-        <div className="flex gap-3 overflow-x-auto pb-1">
+        <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 snap-x snap-mandatory sm:mx-0 sm:gap-3 sm:px-0">
           {images.map((src, i) => (
             <button
               key={`${src}-${i}`}
               type="button"
               onClick={() => setActive(i)}
-              className={`relative h-20 w-20 shrink-0 overflow-hidden rounded-xl border-2 transition-all ${
-                i === active ? 'border-terza-blue ring-2 ring-terza-blue/30' : 'border-gray-200 opacity-80 hover:opacity-100'
+              className={`relative h-16 w-16 shrink-0 snap-start overflow-hidden rounded-xl border-2 transition-all sm:h-20 sm:w-20 ${
+                i === active
+                  ? 'border-terza-blue ring-2 ring-terza-blue/30'
+                  : 'border-gray-200 opacity-80 hover:opacity-100'
               }`}
             >
               {isAnimatedAsset(src) ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={src} alt="" className="h-full w-full object-contain bg-neutral-50 p-1" />
+                <img src={src} alt="" className="h-full w-full bg-neutral-50 object-contain p-1" />
               ) : (
-                <Image src={src} alt="" fill className="object-contain bg-neutral-950 p-1" sizes="80px" />
+                <Image
+                  src={src}
+                  alt=""
+                  fill
+                  className="bg-neutral-50 object-contain p-1"
+                  sizes="80px"
+                />
               )}
             </button>
           ))}
