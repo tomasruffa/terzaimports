@@ -7,6 +7,7 @@ interface Product {
   id: string
   name: string
   sku: string
+  inventory_sku?: string | null
   category: string
   purchase_price: number
   sale_price: number
@@ -18,6 +19,7 @@ interface Product {
   image_url: string | null
   images: string[]
   active: boolean
+  meli_listings_count?: number
 }
 
 import { apiFetch } from '@/utils/apiFetch'
@@ -43,6 +45,21 @@ export default function ProductsPage() {
 
   useEffect(() => { fetchProducts() }, [fetchProducts])
 
+  const [consolidating, setConsolidating] = useState(false)
+
+  const handleConsolidate = async () => {
+    setConsolidating(true)
+    try {
+      const res = await apiFetch('/api/products/consolidate', { method: 'POST' })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || 'Error al consolidar')
+      await fetchProducts()
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'No se pudo consolidar')
+    } finally {
+      setConsolidating(false)
+    }
+  }
   const handleEdit = (p: Product) => { setEditProduct(p); setModalOpen(true) }
   const handleNew = () => { setEditProduct(null); setModalOpen(true) }
 
@@ -66,10 +83,19 @@ export default function ProductsPage() {
             className="w-full bg-terza-navy-light border border-terza-gray-dark/50 rounded-lg pl-10 pr-4 py-2.5 text-white placeholder-terza-gray/50 focus:outline-none focus:border-terza-blue text-sm"
           />
         </div>
-        <button onClick={handleNew} className="btn-primary flex items-center gap-2 text-sm py-2.5 whitespace-nowrap">
-          <Plus size={16} />
-          Nuevo producto
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={handleConsolidate}
+            disabled={consolidating}
+            className="btn-secondary text-sm py-2.5 whitespace-nowrap"
+          >
+            {consolidating ? 'Consolidando...' : 'Consolidar ML'}
+          </button>
+          <button onClick={handleNew} className="btn-primary flex items-center gap-2 text-sm py-2.5 whitespace-nowrap">
+            <Plus size={16} />
+            Nuevo producto
+          </button>
+        </div>
       </div>
 
       {/* Table */}
@@ -78,7 +104,7 @@ export default function ProductsPage() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-terza-gray-dark/30">
-                {['Producto', 'SKU', 'Categoría', 'Precio compra', 'Precio venta', 'Stock', 'Estado'].map(h => (
+                {['Producto', 'SKU', 'Publicaciones ML', 'Precio compra', 'Precio venta', 'Stock', 'Estado'].map(h => (
                   <th key={h} className="text-left text-terza-gray text-xs font-semibold uppercase tracking-wider px-4 py-3">
                     {h}
                   </th>
@@ -107,9 +133,15 @@ export default function ProductsPage() {
                         <p className="text-terza-gray text-xs">{p.supplier} · {p.origin_country}</p>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-terza-gray text-xs font-mono">{p.sku}</td>
+                    <td className="px-4 py-3 text-terza-gray text-xs font-mono">{p.inventory_sku || p.sku}</td>
                     <td className="px-4 py-3">
-                      <span className="bg-terza-blue/10 text-terza-blue-bright text-xs px-2 py-0.5 rounded-full">{p.category}</span>
+                      {(p.meli_listings_count ?? 0) > 0 ? (
+                        <span className="bg-yellow-500/15 text-yellow-400 text-xs px-2 py-0.5 rounded-full">
+                          {p.meli_listings_count} en ML
+                        </span>
+                      ) : (
+                        <span className="text-terza-gray text-xs">—</span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-white text-sm">${p.purchase_price.toFixed(2)}</td>
                     <td className="px-4 py-3">

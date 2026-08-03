@@ -1,0 +1,24 @@
+require('dotenv').config({ path: require('path').join(__dirname, '../../../.env') })
+const { consolidateDuplicateProducts } = require('../src/lib/product-consolidation')
+const { getPool } = require('../src/lib/db')
+
+async function main() {
+  const dryRun = process.argv.includes('--dry-run')
+  const results = await consolidateDuplicateProducts({ dryRun })
+  console.log(JSON.stringify(results, null, 2))
+
+  if (!dryRun) {
+    const { rows } = await getPool().query(
+      `SELECT p.id, p.name, p.inventory_sku, p.stock_quantity,
+         (SELECT COUNT(*)::int FROM meli_items mi WHERE mi.product_id = p.id) AS listings
+       FROM products p WHERE active = true ORDER BY p.name`
+    )
+    console.log('\nActive products after consolidate:')
+    console.table(rows)
+  }
+}
+
+main().catch((err) => {
+  console.error(err)
+  process.exit(1)
+})

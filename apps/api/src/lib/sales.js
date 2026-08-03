@@ -1,5 +1,6 @@
 const { getPool } = require('./db')
 const { notifyAdmin } = require('./kapso')
+const { maybeNotifyLowStock } = require('./meli-sync')
 
 const SALES_CHANNELS = ['mercadolibre', 'whatsapp', 'facebook', 'presencial']
 
@@ -107,10 +108,20 @@ async function notifyPendingSales({ hours = 48 } = {}) {
 async function findProductByMeliItemId(meliItemId) {
   if (!meliItemId) return null
   const { rows } = await getPool().query(
+    `SELECT p.id, p.name, p.stock_quantity
+     FROM meli_items mi
+     JOIN products p ON p.id = mi.product_id
+     WHERE mi.meli_item_id = $1
+     LIMIT 1`,
+    [meliItemId]
+  )
+  if (rows[0]) return rows[0]
+
+  const legacy = await getPool().query(
     'SELECT id, name, stock_quantity FROM products WHERE meli_item_id = $1 LIMIT 1',
     [meliItemId]
   )
-  return rows[0] ?? null
+  return legacy.rows[0] ?? null
 }
 
 async function deductStockForSale(client, saleId, channel, items) {
@@ -233,6 +244,14 @@ async function createSale({
       notifySaleIfNeeded(sale.id).catch((err) =>
         console.error('[sales] kapso notify failed', err.message)
       )
+      if (deductStock) {
+        const productIds = [...new Set(normalizedItems.map((i) => i.product_id).filter(Boolean))]
+        for (const productId of productIds) {
+          maybeNotifyLowStock(productId).catch((err) =>
+            console.error('[sales] low stock notify failed', err.message)
+          )
+        }
+      }
     }
 
     return { sale_id: sale.id, sale, created: true }

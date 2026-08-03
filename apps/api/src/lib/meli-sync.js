@@ -1,6 +1,12 @@
 const { query } = require('./db')
 const { meliFetch } = require('./meli')
 const { notifyAdmin } = require('./kapso')
+const {
+  productFingerprint,
+  inventorySkuFromFingerprint,
+  findProductByInventorySku,
+  linkMeliItemToProduct,
+} = require('./product-consolidation')
 
 function slugifySku(value, fallback) {
   const base = String(value || fallback)
@@ -35,48 +41,46 @@ function mapMeliItemToProduct(item) {
 
 async function upsertProductFromMeliItem(item) {
   const data = mapMeliItemToProduct(item)
+  const fingerprint = productFingerprint(item.title)
+  const inventorySku = inventorySkuFromFingerprint(fingerprint)
 
-  const existing = await query('SELECT id FROM products WHERE meli_item_id = $1', [data.meli_item_id])
-  if (existing.rows[0]) {
+  const linked = await query('SELECT product_id FROM meli_items WHERE meli_item_id = $1', [data.meli_item_id])
+  let productId = linked.rows[0]?.product_id
+
+  if (!productId) {
+    const byMeli = await query('SELECT id FROM products WHERE meli_item_id = $1', [data.meli_item_id])
+    productId = byMeli.rows[0]?.id
+  }
+
+  if (!productId) {
+    const existing = await findProductByInventorySku(inventorySku)
+    productId = existing?.id
+  }
+
+  if (productId) {
     const { rows } = await query(
       `UPDATE products SET
-         name = $1, sale_price = $2, stock_quantity = $3, image_url = $4,
-         meli_permalink = $5, active = $6, meli_last_synced_at = NOW(), updated_at = NOW()
-       WHERE meli_item_id = $7
+         name = $1, image_url = $2, meli_permalink = $3, active = $4,
+         inventory_sku = COALESCE(inventory_sku, $5),
+         meli_last_synced_at = NOW(), updated_at = NOW()
+       WHERE id = $6
        RETURNING *`,
-      [
-        data.name,
-        data.sale_price,
-        data.stock_quantity,
-        data.image_url,
-        data.meli_permalink,
-        data.active,
-        data.meli_item_id,
-      ]
+      [data.name, data.image_url, data.meli_permalink, data.active, inventorySku, productId]
     )
+    await linkMeliItemToProduct(data.meli_item_id, productId)
     return { product: rows[0], created: false }
   }
 
   const { rows } = await query(
     `INSERT INTO products (
        name, sku, description, category, purchase_price, sale_price,
-       stock_quantity, min_stock, unit, image_url, meli_item_id, meli_permalink,
-       meli_last_synced_at, active
+       stock_quantity, min_stock, unit, image_url, meli_permalink,
+       inventory_sku, meli_last_synced_at, active
      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NOW(),$13)
-     ON CONFLICT (sku) DO UPDATE SET
-       name = EXCLUDED.name,
-       sale_price = EXCLUDED.sale_price,
-       stock_quantity = EXCLUDED.stock_quantity,
-       image_url = EXCLUDED.image_url,
-       meli_item_id = EXCLUDED.meli_item_id,
-       meli_permalink = EXCLUDED.meli_permalink,
-       meli_last_synced_at = NOW(),
-       active = EXCLUDED.active,
-       updated_at = NOW()
      RETURNING *`,
     [
       data.name,
-      data.sku,
+      inventorySku,
       data.description,
       data.category,
       data.purchase_price,
@@ -85,12 +89,13 @@ async function upsertProductFromMeliItem(item) {
       data.min_stock,
       data.unit,
       data.image_url,
-      data.meli_item_id,
       data.meli_permalink,
+      inventorySku,
       data.active,
     ]
   )
 
+  await linkMeliItemToProduct(data.meli_item_id, rows[0].id)
   return { product: rows[0], created: true }
 }
 
@@ -100,24 +105,47 @@ async function syncItemFromMeli(meliItemId, meliUserId) {
 }
 
 async function syncStockToMeli(productId) {
-  const { rows } = await query(
-    'SELECT id, name, stock_quantity, sale_price, meli_item_id FROM products WHERE id = $1',
+  const productResult = await query(
+    'SELECT id, name, stock_quantity FROM products WHERE id = $1',
     [productId]
   )
-  const product = rows[0]
-  if (!product?.meli_item_id) return { skipped: true }
+  const product = productResult.rows[0]
+  if (!product) return { skipped: true, reason: 'product_not_found' }
 
-  await meliFetch(`/items/${product.meli_item_id}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      available_quantity: product.stock_quantity,
-      price: product.sale_price,
-    }),
-  })
+  const listings = await query(
+    `SELECT meli_item_id, price, listing_type_id FROM meli_items
+     WHERE product_id = $1 AND status = 'active'`,
+    [productId]
+  )
+
+  if (!listings.rows.length) {
+    const legacy = await query('SELECT meli_item_id, sale_price FROM products WHERE id = $1 AND meli_item_id IS NOT NULL', [productId])
+    if (legacy.rows[0]) {
+      listings.rows.push({ meli_item_id: legacy.rows[0].meli_item_id, price: legacy.rows[0].sale_price })
+    }
+  }
+
+  if (!listings.rows.length) return { skipped: true, reason: 'no_listings' }
+
+  const results = []
+  for (const listing of listings.rows) {
+    try {
+      await meliFetch(`/items/${listing.meli_item_id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          available_quantity: product.stock_quantity,
+          price: Number(listing.price) || undefined,
+        }),
+      })
+      results.push({ meli_item_id: listing.meli_item_id, synced: true })
+    } catch (err) {
+      results.push({ meli_item_id: listing.meli_item_id, error: err.message })
+    }
+  }
 
   await query('UPDATE products SET meli_last_synced_at = NOW() WHERE id = $1', [productId])
-  return { synced: true, meli_item_id: product.meli_item_id }
+  return { synced: true, listings: results }
 }
 
 async function importUserItems(meliUserId) {
@@ -157,21 +185,53 @@ async function importUserItems(meliUserId) {
 async function reconcileStockFromMeliItems() {
   const { rowCount } = await query(
     `UPDATE products p
-     SET stock_quantity = mi.available_quantity, updated_at = NOW()
-     FROM meli_items mi
-     WHERE p.meli_item_id = mi.meli_item_id
-       AND p.meli_item_id IS NOT NULL`
+     SET stock_quantity = sub.max_qty, updated_at = NOW()
+     FROM (
+       SELECT product_id, MAX(available_quantity)::int AS max_qty
+       FROM meli_items
+       WHERE product_id IS NOT NULL
+       GROUP BY product_id
+     ) sub
+     WHERE p.id = sub.product_id`
   )
   return { updated: rowCount }
 }
 
-async function maybeNotifyLowStock(product) {
-  if (!product || product.stock_quantity > product.min_stock) return
+async function maybeNotifyLowStock(productOrId) {
+  const productId = typeof productOrId === 'string' ? productOrId : productOrId?.id
+  if (!productId) return { skipped: true, reason: 'no_product' }
+
+  const { rows } = await query(
+    `SELECT id, name, stock_quantity, min_stock, low_stock_notified_at
+     FROM products WHERE id = $1 AND active = true`,
+    [productId]
+  )
+  const product = rows[0]
+  if (!product) return { skipped: true, reason: 'not_found' }
+
+  if (product.stock_quantity > product.min_stock) {
+    if (product.low_stock_notified_at) {
+      await query('UPDATE products SET low_stock_notified_at = NULL WHERE id = $1', [productId])
+    }
+    return { skipped: true, reason: 'stock_ok' }
+  }
+
+  const cooldownHours = Number(process.env.LOW_STOCK_NOTIFY_COOLDOWN_HOURS) || 24
+  if (product.low_stock_notified_at) {
+    const hoursSince =
+      (Date.now() - new Date(product.low_stock_notified_at).getTime()) / (1000 * 60 * 60)
+    if (hoursSince < cooldownHours) {
+      return { skipped: true, reason: 'cooldown', hours_since: Math.round(hoursSince * 10) / 10 }
+    }
+  }
+
   await notifyAdmin(
     `⚠️ Stock bajo en Terza Imports\n` +
       `Producto: ${product.name}\n` +
       `Stock: ${product.stock_quantity} (mín: ${product.min_stock})`
   )
+  await query('UPDATE products SET low_stock_notified_at = NOW() WHERE id = $1', [productId])
+  return { sent: true }
 }
 
 module.exports = {

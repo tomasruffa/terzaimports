@@ -3,6 +3,7 @@ const multer = require('multer')
 const { query } = require('../lib/db')
 const { uploadProductImage, getPublicUrl } = require('../lib/storage')
 const { syncStockToMeli } = require('../lib/meli-sync')
+const { getMeliListingsForProduct, consolidateDuplicateProducts } = require('../lib/product-consolidation')
 const requireAuth = require('../middleware/auth')
 
 const upload = multer({
@@ -83,7 +84,7 @@ router.get('/', async (req, res) => {
   }
   if (search) {
     params.push(`%${search}%`)
-    conditions.push(`name ILIKE $${params.length}`)
+    conditions.push(`(name ILIKE $${params.length} OR sku ILIKE $${params.length} OR inventory_sku ILIKE $${params.length})`)
   }
 
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
@@ -91,7 +92,12 @@ router.get('/', async (req, res) => {
   try {
     const countResult = await query(`SELECT COUNT(*)::int AS total FROM products ${where}`, params)
     const { rows } = await query(
-      `SELECT * FROM products ${where} ORDER BY created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+      `SELECT p.*,
+         (SELECT COUNT(*)::int FROM meli_items mi WHERE mi.product_id = p.id) AS meli_listings_count
+       FROM products p
+       ${where}
+       ORDER BY p.created_at DESC
+       LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
       [...params, limitNum, offset]
     )
 
@@ -132,9 +138,19 @@ router.get('/:id', async (req, res) => {
     if (!rows[0]) {
       return res.status(404).json({ data: null, error: 'Producto no encontrado' })
     }
-    res.json({ data: normalizeProduct(rows[0]), error: null })
+    const meli_listings = await getMeliListingsForProduct(req.params.id)
+    res.json({ data: { ...normalizeProduct(rows[0]), meli_listings }, error: null })
   } catch (err) {
     res.status(500).json({ data: null, error: err.message })
+  }
+})
+
+router.post('/consolidate', requireAuth, async (_req, res) => {
+  try {
+    const results = await consolidateDuplicateProducts()
+    res.json({ ok: true, groups_merged: results.length, results })
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message })
   }
 })
 

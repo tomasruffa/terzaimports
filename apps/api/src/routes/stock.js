@@ -1,6 +1,6 @@
 const express = require('express')
 const { getPool } = require('../lib/db')
-const { syncStockToMeli } = require('../lib/meli-sync')
+const { syncStockToMeli, maybeNotifyLowStock } = require('../lib/meli-sync')
 
 const router = express.Router()
 
@@ -106,6 +106,9 @@ router.post('/movements', async (req, res) => {
     await client.query('COMMIT')
     syncStockToMeli(product_id).catch((err) => {
       console.error('[stock] meli sync', err.message)
+    })
+    maybeNotifyLowStock(product_id).catch((err) => {
+      console.error('[stock] low stock notify', err.message)
     })
     res.status(201).json({ data: movementResult.rows[0], error: null, message: 'Movimiento registrado' })
   } catch (err) {

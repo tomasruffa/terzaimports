@@ -109,6 +109,11 @@ CREATE TRIGGER users_updated_at
 ALTER TABLE products ADD COLUMN IF NOT EXISTS meli_item_id VARCHAR(50);
 ALTER TABLE products ADD COLUMN IF NOT EXISTS meli_permalink TEXT;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS meli_last_synced_at TIMESTAMPTZ;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS inventory_sku VARCHAR(100);
+ALTER TABLE products ADD COLUMN IF NOT EXISTS low_stock_notified_at TIMESTAMPTZ;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_products_inventory_sku
+  ON products(inventory_sku) WHERE inventory_sku IS NOT NULL;
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_products_meli_item_id
   ON products(meli_item_id) WHERE meli_item_id IS NOT NULL;
