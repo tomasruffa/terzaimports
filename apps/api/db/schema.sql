@@ -104,3 +104,21 @@ DROP TRIGGER IF EXISTS users_updated_at ON users;
 CREATE TRIGGER users_updated_at
   BEFORE UPDATE ON users
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
+-- Mercado Libre sync (idempotente en re-runs de migrate)
+ALTER TABLE products ADD COLUMN IF NOT EXISTS meli_item_id VARCHAR(50);
+ALTER TABLE products ADD COLUMN IF NOT EXISTS meli_permalink TEXT;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS meli_last_synced_at TIMESTAMPTZ;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_products_meli_item_id
+  ON products(meli_item_id) WHERE meli_item_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS meli_notifications (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  notification_id VARCHAR(255) UNIQUE NOT NULL,
+  topic VARCHAR(100) NOT NULL,
+  resource TEXT,
+  processed_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_meli_notifications_topic ON meli_notifications(topic);

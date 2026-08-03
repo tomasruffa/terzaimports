@@ -1,8 +1,20 @@
 const crypto = require('crypto')
 const express = require('express')
-const { query } = require('../lib/db')
+const { saveTokens, refreshAllTokens, getTokenRow } = require('../lib/meli')
+const { importUserItems } = require('../lib/meli-sync')
+const { processMeliNotification } = require('../lib/meli-notifications')
+const { isConfigured: isKapsoConfigured } = require('../lib/kapso')
+const requireAuth = require('../middleware/auth')
 
 const router = express.Router()
+
+function requireCronOrAuth(req, res, next) {
+  const cronSecret = process.env.MELI_CRON_SECRET
+  if (cronSecret && req.headers['x-cron-secret'] === cronSecret) {
+    return next()
+  }
+  return requireAuth(req, res, next)
+}
 
 const PKCE_STATE_TTL_MS = 10 * 60 * 1000
 
@@ -69,15 +81,24 @@ function getRedirectUri() {
 }
 
 /** GET /api/mercadolibre — info para registrar la app */
-router.get('/', (_req, res) => {
+router.get('/', async (_req, res) => {
   const redirectUri =
     getRedirectUri() ?? 'https://terzaapi-production.up.railway.app/api/mercadolibre/callback'
+  const apiBase = process.env.API_PUBLIC_URL?.replace(/\/$/, '') ?? 'https://terzaapi-production.up.railway.app'
+  const tokenRow = await getTokenRow().catch(() => null)
 
   res.json({
     ok: true,
     redirect_uri: redirectUri,
+    webhook_url: `${apiBase}/api/mercadolibre/webhook`,
+    notifications_callback_url: `${apiBase}/api/mercadolibre/webhook`,
     authorize_url: '/api/mercadolibre/authorize',
     callback_url: '/api/mercadolibre/callback',
+    kapso_configured: isKapsoConfigured(),
+    linked_account: tokenRow
+      ? { meli_user_id: tokenRow.meli_user_id, expires_at: tokenRow.expires_at }
+      : null,
+    recommended_topics: ['orders_v2', 'questions', 'items', 'payments'],
     docs: 'https://developers.mercadolibre.com.ar/es_ar/autenticacion-y-autorizacion',
   })
 })
@@ -202,22 +223,7 @@ router.get('/callback', async (req, res) => {
     })
 
     const meliUserId = me?.id ?? tokenJson.user_id
-    const expiresAt = tokenJson.expires_in
-      ? new Date(Date.now() + Number(tokenJson.expires_in) * 1000).toISOString()
-      : null
-
-    await query('DELETE FROM meli_tokens WHERE meli_user_id = $1', [meliUserId])
-    await query(
-      `INSERT INTO meli_tokens (meli_user_id, access_token, refresh_token, expires_at, scope)
-       VALUES ($1, $2, $3, $4, $5)`,
-      [
-        meliUserId,
-        tokenJson.access_token,
-        tokenJson.refresh_token,
-        expiresAt,
-        tokenJson.scope ?? null,
-      ]
-    )
+    await saveTokens(meliUserId, tokenJson)
 
     res.json({
       ok: true,
@@ -235,6 +241,36 @@ router.get('/callback', async (req, res) => {
   } catch (err) {
     console.error('[meli] callback', err)
     res.status(500).json({ ok: false, error: 'internal_error' })
+  }
+})
+
+/** Webhook de notificaciones de Mercado Libre → alertas WhatsApp vía Kapso */
+router.post('/webhook', (req, res) => {
+  res.status(200).send('OK')
+  processMeliNotification(req.body).catch((err) => {
+    console.error('[meli] webhook process', err)
+  })
+})
+
+/** Renueva tokens próximos a vencer (cron o admin) */
+router.post('/refresh-tokens', requireCronOrAuth, async (_req, res) => {
+  try {
+    const results = await refreshAllTokens()
+    res.json({ ok: true, results })
+  } catch (err) {
+    console.error('[meli] refresh-tokens', err)
+    res.status(500).json({ ok: false, error: err.message })
+  }
+})
+
+/** Importa publicaciones activas de ML al catálogo local */
+router.post('/sync', requireAuth, async (req, res) => {
+  try {
+    const result = await importUserItems(req.body?.meli_user_id)
+    res.json({ ok: true, ...result })
+  } catch (err) {
+    console.error('[meli] sync', err)
+    res.status(500).json({ ok: false, error: err.message })
   }
 })
 

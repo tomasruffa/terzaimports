@@ -2,6 +2,7 @@ const express = require('express')
 const multer = require('multer')
 const { query } = require('../lib/db')
 const { uploadProductImage, getPublicUrl } = require('../lib/storage')
+const { syncStockToMeli } = require('../lib/meli-sync')
 const requireAuth = require('../middleware/auth')
 
 const upload = multer({
@@ -177,6 +178,9 @@ router.put('/:id', requireAuth, async (req, res) => {
     if (!rows[0]) {
       return res.status(404).json({ data: null, error: 'Producto no encontrado' })
     }
+    syncStockToMeli(req.params.id).catch((err) => {
+      console.error('[products] meli sync', err.message)
+    })
     res.json({ data: rows[0], error: null, message: 'Producto actualizado exitosamente' })
   } catch (err) {
     res.status(400).json({ data: null, error: err.message })
