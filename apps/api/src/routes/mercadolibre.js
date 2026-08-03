@@ -1,7 +1,58 @@
+const crypto = require('crypto')
 const express = require('express')
 const { query } = require('../lib/db')
 
 const router = express.Router()
+
+const PKCE_STATE_TTL_MS = 10 * 60 * 1000
+
+function getSigningSecret() {
+  return process.env.JWT_SECRET || process.env.MELI_CLIENT_SECRET || 'meli-pkce-dev'
+}
+
+function generateCodeVerifier() {
+  return crypto.randomBytes(32).toString('base64url')
+}
+
+function generateCodeChallenge(verifier) {
+  return crypto.createHash('sha256').update(verifier).digest('base64url')
+}
+
+/** Guarda el code_verifier en state firmado (ML lo devuelve en el callback). */
+function createPkceState(codeVerifier) {
+  const payload = Buffer.from(
+    JSON.stringify({
+      v: codeVerifier,
+      n: crypto.randomBytes(16).toString('hex'),
+      t: Date.now(),
+    })
+  ).toString('base64url')
+  const sig = crypto.createHmac('sha256', getSigningSecret()).update(payload).digest('base64url')
+  return `${payload}.${sig}`
+}
+
+function parsePkceState(state) {
+  if (!state || typeof state !== 'string') return null
+
+  const dot = state.lastIndexOf('.')
+  if (dot <= 0) return null
+
+  const payload = state.slice(0, dot)
+  const sig = state.slice(dot + 1)
+  const expected = crypto.createHmac('sha256', getSigningSecret()).update(payload).digest('base64url')
+
+  if (sig.length !== expected.length) return null
+  if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return null
+
+  try {
+    const data = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'))
+    if (!data.v || typeof data.t !== 'number') return null
+    if (Date.now() - data.t > PKCE_STATE_TTL_MS) return null
+    return data.v
+  } catch {
+    return null
+  }
+}
 
 const MELI_AUTH_URL = 'https://auth.mercadolibre.com.ar/authorization'
 const MELI_TOKEN_URL = 'https://api.mercadolibre.com/oauth/token'
@@ -45,17 +96,24 @@ router.get('/authorize', (req, res) => {
     })
   }
 
+  const codeVerifier = generateCodeVerifier()
+  const codeChallenge = generateCodeChallenge(codeVerifier)
+  const state = createPkceState(codeVerifier)
+
   const url = new URL(MELI_AUTH_URL)
   url.searchParams.set('response_type', 'code')
   url.searchParams.set('client_id', clientId)
   url.searchParams.set('redirect_uri', redirectUri)
+  url.searchParams.set('state', state)
+  url.searchParams.set('code_challenge', codeChallenge)
+  url.searchParams.set('code_challenge_method', 'S256')
 
   res.redirect(url.toString())
 })
 
 /** Callback OAuth — registrar esta URL en Mercado Libre */
 router.get('/callback', async (req, res) => {
-  const { code, error, error_description: errorDescription } = req.query
+  const { code, error, error_description: errorDescription, state } = req.query
 
   if (error) {
     return res.status(400).json({
@@ -88,6 +146,16 @@ router.get('/callback', async (req, res) => {
     })
   }
 
+  const codeVerifier = parsePkceState(state ? String(state) : null)
+  if (!codeVerifier) {
+    return res.status(400).json({
+      ok: false,
+      error: 'invalid_pkce_state',
+      message:
+        'Falta o expiró el state de PKCE. Volvé a autorizar desde /api/mercadolibre/authorize (no reutilices el link del callback).',
+    })
+  }
+
   try {
     const body = new URLSearchParams({
       grant_type: 'authorization_code',
@@ -95,6 +163,7 @@ router.get('/callback', async (req, res) => {
       client_secret: clientSecret,
       code: String(code),
       redirect_uri: redirectUri,
+      code_verifier: codeVerifier,
     })
 
     const tokenRes = await fetch(MELI_TOKEN_URL, {
