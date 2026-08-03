@@ -244,7 +244,7 @@ async function createSale({
   }
 }
 
-async function upsertSaleFromMeliOrder(order, meliUserId) {
+async function upsertSaleFromMeliOrder(order, meliUserId, { deductStock = false } = {}) {
   const orderId = String(order.id)
   const items = []
 
@@ -278,7 +278,7 @@ async function upsertSaleFromMeliOrder(order, meliUserId) {
     notes: order.status_detail ?? null,
     saleDate: order.date_created ? new Date(order.date_created) : new Date(),
     items,
-    deductStock: MELI_COUNTED_STATUSES.has(order.status),
+    deductStock: deductStock && MELI_COUNTED_STATUSES.has(order.status),
   })
 
   if (result.sale_id) {
@@ -313,7 +313,7 @@ async function backfillMeliSales(meliUserId) {
     try {
       const order = row.raw || { id: row.meli_order_id }
       if (!order.id) order.id = row.meli_order_id
-      const result = await upsertSaleFromMeliOrder(order, meliUserId)
+      const result = await upsertSaleFromMeliOrder(order, meliUserId, { deductStock: false })
       if (result.created) created += 1
       else skipped += 1
     } catch (err) {

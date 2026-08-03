@@ -108,7 +108,7 @@ async function upsertItem(item, meliUserId, visits = {}) {
   return rows[0]
 }
 
-async function upsertOrder(order, meliUserId) {
+async function upsertOrder(order, meliUserId, { deductStock = false } = {}) {
   await query(
     `INSERT INTO meli_orders (
        meli_order_id, meli_user_id, status, status_detail, buyer_id, buyer_nickname,
@@ -166,7 +166,7 @@ async function upsertOrder(order, meliUserId) {
   }
 
   try {
-    await upsertSaleFromMeliOrder(order, meliUserId)
+    await upsertSaleFromMeliOrder(order, meliUserId, { deductStock })
   } catch (err) {
     console.error('[meli] sale sync order', order.id, err.message)
   }

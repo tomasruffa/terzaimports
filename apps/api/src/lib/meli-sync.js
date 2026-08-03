@@ -40,13 +40,14 @@ async function upsertProductFromMeliItem(item) {
   if (existing.rows[0]) {
     const { rows } = await query(
       `UPDATE products SET
-         name = $1, sale_price = $2, image_url = $3,
-         meli_permalink = $4, active = $5, meli_last_synced_at = NOW(), updated_at = NOW()
-       WHERE meli_item_id = $6
+         name = $1, sale_price = $2, stock_quantity = $3, image_url = $4,
+         meli_permalink = $5, active = $6, meli_last_synced_at = NOW(), updated_at = NOW()
+       WHERE meli_item_id = $7
        RETURNING *`,
       [
         data.name,
         data.sale_price,
+        data.stock_quantity,
         data.image_url,
         data.meli_permalink,
         data.active,
@@ -153,6 +154,17 @@ async function importUserItems(meliUserId) {
   return { imported: total, results }
 }
 
+async function reconcileStockFromMeliItems() {
+  const { rowCount } = await query(
+    `UPDATE products p
+     SET stock_quantity = mi.available_quantity, updated_at = NOW()
+     FROM meli_items mi
+     WHERE p.meli_item_id = mi.meli_item_id
+       AND p.meli_item_id IS NOT NULL`
+  )
+  return { updated: rowCount }
+}
+
 async function maybeNotifyLowStock(product) {
   if (!product || product.stock_quantity > product.min_stock) return
   await notifyAdmin(
@@ -167,5 +179,6 @@ module.exports = {
   syncStockToMeli,
   importUserItems,
   upsertProductFromMeliItem,
+  reconcileStockFromMeliItems,
   maybeNotifyLowStock,
 }

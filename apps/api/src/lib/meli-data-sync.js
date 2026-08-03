@@ -10,7 +10,7 @@ const {
   finishSyncRun,
   getMetricsSummary,
 } = require('./meli-repository')
-const { syncItemFromMeli } = require('./meli-sync')
+const { syncItemFromMeli, reconcileStockFromMeliItems } = require('./meli-sync')
 const { backfillMeliSales } = require('./sales')
 
 const ITEM_STATUSES = ['active', 'paused', 'closed']
@@ -248,6 +248,7 @@ async function runFullSync(meliUserId) {
     ])
 
     const metrics = await syncMetricsSnapshot(userId)
+    const stockReconcile = await reconcileStockFromMeliItems()
     const salesBackfill = await backfillMeliSales(userId)
 
     const summary = {
@@ -256,6 +257,7 @@ async function runFullSync(meliUserId) {
       orders,
       questions,
       metrics,
+      stock_reconcile: stockReconcile,
       sales_backfill: salesBackfill,
     }
 
@@ -267,9 +269,9 @@ async function runFullSync(meliUserId) {
   }
 }
 
-async function syncOrderById(orderId, meliUserId) {
+async function syncOrderById(orderId, meliUserId, { deductStock = true } = {}) {
   const order = await meliFetch(`/orders/${orderId}`, {}, meliUserId)
-  await upsertOrder(order, meliUserId)
+  await upsertOrder(order, meliUserId, { deductStock })
   for (const payment of order.payments || []) {
     if (payment.id) await upsertPayment(payment, meliUserId)
   }
