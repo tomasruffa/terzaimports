@@ -107,6 +107,14 @@ async function processMeliNotification(payload) {
     case 'payments':
       await handlePayment(resource, meliUserId)
       break
+    case 'test_ping':
+      await notifyAdmin(
+        `✅ Webhook de Mercado Libre OK\n` +
+          `Notificación de prueba recibida correctamente.\n` +
+          `Topic: ${topic}\n` +
+          `Hora: ${new Date().toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' })}`
+      )
+      break
     default:
       console.log('[meli] topic sin handler', topic, resource)
   }

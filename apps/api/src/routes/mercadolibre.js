@@ -246,6 +246,71 @@ router.get('/callback', async (req, res) => {
 })
 
 /** Webhook de notificaciones de Mercado Libre → alertas WhatsApp vía Kapso */
+router.get('/webhook', (_req, res) => {
+  res.status(200).json({
+    ok: true,
+    message: 'Webhook activo. Mercado Libre debe enviar POST a esta URL.',
+    url: `${process.env.API_PUBLIC_URL?.replace(/\/$/, '') ?? 'https://terzaapi-production.up.railway.app'}/api/mercadolibre/webhook`,
+  })
+})
+
+router.get('/webhook/status', requireAuth, async (_req, res) => {
+  try {
+    const apiBase = process.env.API_PUBLIC_URL?.replace(/\/$/, '') ?? 'https://terzaapi-production.up.railway.app'
+    const count = await query('SELECT COUNT(*)::int AS total FROM meli_notifications')
+    const recent = await query(
+      `SELECT notification_id, topic, resource, processed_at
+       FROM meli_notifications
+       ORDER BY processed_at DESC
+       LIMIT 15`
+    )
+
+    res.json({
+      ok: true,
+      webhook_url: `${apiBase}/api/mercadolibre/webhook`,
+      total_received: count.rows[0].total,
+      recent: recent.rows,
+      hint:
+        count.rows[0].total === 0
+          ? 'Todavía no llegó ninguna notificación real de ML. Usá POST /api/mercadolibre/webhook/test para probar.'
+          : 'Las notificaciones de ML están llegando.',
+    })
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message })
+  }
+})
+
+router.post('/webhook/test', requireAuth, async (req, res) => {
+  try {
+    const tokenRow = await getTokenRow()
+    const notificationId = `test-${Date.now()}`
+    const payload = {
+      _id: notificationId,
+      topic: req.body?.topic || 'test_ping',
+      resource: req.body?.resource || '/test/ping',
+      user_id: tokenRow?.meli_user_id ?? req.body?.user_id,
+    }
+
+    await processMeliNotification(payload)
+
+    const stored = await query(
+      'SELECT notification_id, topic, processed_at FROM meli_notifications WHERE notification_id = $1',
+      [notificationId]
+    )
+
+    res.json({
+      ok: true,
+      message: 'Notificación de prueba procesada',
+      payload,
+      stored: stored.rows[0] ?? null,
+      whatsapp: payload.topic === 'test_ping' ? 'Se intentó enviar confirmación por Kapso' : null,
+    })
+  } catch (err) {
+    console.error('[meli] webhook/test', err)
+    res.status(500).json({ ok: false, error: err.message })
+  }
+})
+
 router.post('/webhook', (req, res) => {
   res.status(200).send('OK')
   processMeliNotification(req.body).catch((err) => {
