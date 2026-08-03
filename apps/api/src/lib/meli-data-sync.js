@@ -11,6 +11,7 @@ const {
   getMetricsSummary,
 } = require('./meli-repository')
 const { syncItemFromMeli } = require('./meli-sync')
+const { backfillMeliSales } = require('./sales')
 
 const ITEM_STATUSES = ['active', 'paused', 'closed']
 const ORDERS_LOOKBACK_DAYS = 90
@@ -247,6 +248,7 @@ async function runFullSync(meliUserId) {
     ])
 
     const metrics = await syncMetricsSnapshot(userId)
+    const salesBackfill = await backfillMeliSales(userId)
 
     const summary = {
       account: { meli_user_id: userId, nickname: me.nickname },
@@ -254,6 +256,7 @@ async function runFullSync(meliUserId) {
       orders,
       questions,
       metrics,
+      sales_backfill: salesBackfill,
     }
 
     await finishSyncRun(run.id, 'success', summary)

@@ -1,73 +1,49 @@
 'use client'
+
 import { useEffect, useState } from 'react'
-import { Package, DollarSign, AlertTriangle, XCircle, TrendingUp, TrendingDown } from 'lucide-react'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts'
-
-interface Metrics {
-  total_products: number
-  total_stock_value: number
-  low_stock_products: number
-  out_of_stock_products: number
-  top_products: Array<{ id: string; name: string; stock_quantity: number; sale_price: number; total_value: number }>
-  monthly_movements: Array<{ month: string; entries: number; exits: number }>
-}
-
+import Link from 'next/link'
+import {
+  Package, DollarSign, AlertTriangle, XCircle, ShoppingCart,
+} from 'lucide-react'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { apiFetch } from '@/utils/apiFetch'
 
-const EMPTY_METRICS: Metrics = {
-  total_products: 0,
-  total_stock_value: 0,
-  low_stock_products: 0,
-  out_of_stock_products: 0,
-  top_products: [],
-  monthly_movements: [],
+interface ConsolidatedDashboard {
+  stock: {
+    total_products: number
+    total_units: number
+    stock_retail_value: number
+    low_stock: number
+    out_of_stock: number
+  }
+  totals: {
+    total_revenue: number
+    revenue_last_30d: number
+    sales_last_30d: number
+  }
+  by_channel: Array<{ channel: string; sales_count: number; revenue: number; revenue_last_30d: number }>
+  recent_sales: Array<{ id: string; channel: string; customer_name: string | null; total_amount: number; sale_date: string }>
 }
 
-const statCards = (m: Metrics) => [
-  {
-    label: 'Total Productos',
-    value: m.total_products,
-    icon: Package,
-    color: 'text-terza-blue-bright',
-    bg: 'bg-terza-blue/10',
-    change: '+3 este mes'
-  },
-  {
-    label: 'Valor en Stock',
-    value: `$${m.total_stock_value.toLocaleString('es-AR', { minimumFractionDigits: 0 })}`,
-    icon: DollarSign,
-    color: 'text-green-400',
-    bg: 'bg-green-500/10',
-    change: '+12% vs mes anterior'
-  },
-  {
-    label: 'Stock Bajo',
-    value: m.low_stock_products,
-    icon: AlertTriangle,
-    color: 'text-yellow-400',
-    bg: 'bg-yellow-500/10',
-    change: 'Requieren atención'
-  },
-  {
-    label: 'Sin Stock',
-    value: m.out_of_stock_products,
-    icon: XCircle,
-    color: 'text-red-400',
-    bg: 'bg-red-500/10',
-    change: 'Productos agotados'
-  },
-]
+const channelLabels: Record<string, string> = {
+  mercadolibre: 'Mercado Libre',
+  whatsapp: 'WhatsApp',
+  facebook: 'Facebook',
+  presencial: 'Presencial',
+}
+
+function formatMoney(value: number) {
+  return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(value)
+}
 
 export default function DashboardPage() {
-  const [metrics, setMetrics] = useState<Metrics>(EMPTY_METRICS)
+  const [data, setData] = useState<ConsolidatedDashboard | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    apiFetch('/api/stock/dashboard')
-      .then(r => r.json())
-      .then(res => {
-        if (res.data) setMetrics(res.data)
-      })
+    apiFetch('/api/sales/dashboard')
+      .then((r) => r.json())
+      .then((res) => { if (res.data) setData(res.data) })
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [])
@@ -83,81 +59,106 @@ export default function DashboardPage() {
     )
   }
 
+  if (!data) {
+    return <p className="text-terza-gray text-sm">No se pudieron cargar las métricas consolidadas.</p>
+  }
+
+  const chartData = data.by_channel.map((ch) => ({
+    channel: channelLabels[ch.channel] ?? ch.channel,
+    revenue: Number(ch.revenue),
+  }))
+
   return (
     <div className="space-y-6">
-      {/* Stat cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        {statCards(metrics).map(card => (
-          <div key={card.label} className="card-dark flex items-start gap-4">
-            <div className={`w-12 h-12 ${card.bg} rounded-xl flex items-center justify-center flex-shrink-0`}>
-              <card.icon size={22} className={card.color} />
-            </div>
-            <div>
-              <p className="text-terza-gray text-sm">{card.label}</p>
-              <p className="text-white text-2xl font-bold mt-0.5">{card.value}</p>
-              <p className="text-terza-gray/60 text-xs mt-1">{card.change}</p>
-            </div>
-          </div>
-        ))}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h2 className="text-white font-bold text-lg">Resumen del negocio</h2>
+          <p className="text-terza-gray text-sm">Stock único y ventas de todos los canales</p>
+        </div>
+        <Link href="/dashboard/sales" className="btn-primary text-sm py-2 px-4 inline-flex items-center gap-2">
+          <ShoppingCart size={16} />
+          Ver ventas
+        </Link>
       </div>
 
-      {/* Charts */}
-      <div className="grid lg:grid-cols-3 gap-6">
-        {/* Bar chart */}
-        <div className="lg:col-span-2 card-dark">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h3 className="text-white font-bold">Movimientos de Stock</h3>
-              <p className="text-terza-gray text-xs">Entradas y salidas por mes</p>
-            </div>
-            <div className="flex items-center gap-4 text-xs">
-              <span className="flex items-center gap-1.5 text-terza-gray">
-                <span className="w-2 h-2 rounded-full bg-terza-blue inline-block" />Entradas
-              </span>
-              <span className="flex items-center gap-1.5 text-terza-gray">
-                <span className="w-2 h-2 rounded-full bg-blue-400 inline-block" />Salidas
-              </span>
-            </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        <div className="card-dark flex items-start gap-4">
+          <div className="w-12 h-12 bg-green-500/10 rounded-xl flex items-center justify-center">
+            <DollarSign size={22} className="text-green-400" />
           </div>
+          <div>
+            <p className="text-terza-gray text-sm">Facturación total</p>
+            <p className="text-white text-2xl font-bold">{formatMoney(Number(data.totals.total_revenue))}</p>
+            <p className="text-terza-gray/60 text-xs mt-1">{formatMoney(Number(data.totals.revenue_last_30d))} últimos 30 días</p>
+          </div>
+        </div>
+        <div className="card-dark flex items-start gap-4">
+          <div className="w-12 h-12 bg-terza-blue/10 rounded-xl flex items-center justify-center">
+            <Package size={22} className="text-terza-blue-bright" />
+          </div>
+          <div>
+            <p className="text-terza-gray text-sm">Stock disponible</p>
+            <p className="text-white text-2xl font-bold">{data.stock.total_units} uds</p>
+            <p className="text-terza-gray/60 text-xs mt-1">{data.stock.total_products} productos activos</p>
+          </div>
+        </div>
+        <div className="card-dark flex items-start gap-4">
+          <div className="w-12 h-12 bg-yellow-500/10 rounded-xl flex items-center justify-center">
+            <AlertTriangle size={22} className="text-yellow-400" />
+          </div>
+          <div>
+            <p className="text-terza-gray text-sm">Stock bajo</p>
+            <p className="text-white text-2xl font-bold">{data.stock.low_stock}</p>
+            <p className="text-terza-gray/60 text-xs mt-1">Valor retail {formatMoney(Number(data.stock.stock_retail_value))}</p>
+          </div>
+        </div>
+        <div className="card-dark flex items-start gap-4">
+          <div className="w-12 h-12 bg-red-500/10 rounded-xl flex items-center justify-center">
+            <XCircle size={22} className="text-red-400" />
+          </div>
+          <div>
+            <p className="text-terza-gray text-sm">Sin stock</p>
+            <p className="text-white text-2xl font-bold">{data.stock.out_of_stock}</p>
+            <p className="text-terza-gray/60 text-xs mt-1">{data.totals.sales_last_30d} ventas en 30 días</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 card-dark">
+          <h3 className="text-white font-bold mb-1">Ventas por canal</h3>
+          <p className="text-terza-gray text-xs mb-5">Facturación acumulada</p>
           <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={metrics.monthly_movements} barGap={4}>
+            <BarChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
-              <XAxis dataKey="month" tick={{ fill: '#9CA3AF', fontSize: 12 }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fill: '#9CA3AF', fontSize: 12 }} axisLine={false} tickLine={false} />
+              <XAxis dataKey="channel" tick={{ fill: '#9CA3AF', fontSize: 11 }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fill: '#9CA3AF', fontSize: 11 }} axisLine={false} tickLine={false} />
               <Tooltip
                 contentStyle={{ background: '#111827', border: '1px solid #374151', borderRadius: '8px', color: '#fff' }}
-                cursor={{ fill: 'rgba(37,99,235,0.05)' }}
+                formatter={(v: number) => [formatMoney(v), 'Facturación']}
               />
-              <Bar dataKey="entries" fill="#2563EB" radius={[4, 4, 0, 0]} name="Entradas" />
-              <Bar dataKey="exits" fill="#60A5FA" radius={[4, 4, 0, 0]} name="Salidas" />
+              <Bar dataKey="revenue" fill="#2563EB" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
 
-        {/* Top products */}
         <div className="card-dark">
-          <h3 className="text-white font-bold mb-1">Top Productos</h3>
-          <p className="text-terza-gray text-xs mb-5">Por valor en stock</p>
-          <div className="space-y-4">
-            {metrics.top_products.map((p, i) => (
-              <div key={p.id} className="flex items-center gap-3">
-                <span className="text-terza-gray text-xs w-4">{i + 1}</span>
-                <div className="flex-1 min-w-0">
-                  <p className="text-white text-sm font-medium truncate">{p.name}</p>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <div className="flex-1 bg-terza-navy rounded-full h-1.5">
-                      <div
-                        className="bg-terza-blue rounded-full h-1.5 transition-all"
-                        style={{ width: `${Math.min(100, (p.total_value / (metrics.top_products[0]?.total_value || 1)) * 100)}%` }}
-                      />
-                    </div>
-                  </div>
+          <h3 className="text-white font-bold mb-4">Últimas ventas</h3>
+          <div className="space-y-3">
+            {data.recent_sales.map((sale) => (
+              <div key={sale.id} className="flex items-center justify-between gap-3 text-sm">
+                <div className="min-w-0">
+                  <p className="text-white truncate">{channelLabels[sale.channel] ?? sale.channel}</p>
+                  <p className="text-terza-gray text-xs truncate">{sale.customer_name || 'Cliente'}</p>
                 </div>
-                <span className="text-terza-blue-bright text-xs font-medium whitespace-nowrap">
-                  ${p.total_value.toLocaleString('es-AR', { maximumFractionDigits: 0 })}
+                <span className="text-green-400 font-medium whitespace-nowrap">
+                  {formatMoney(Number(sale.total_amount))}
                 </span>
               </div>
             ))}
+            {data.recent_sales.length === 0 && (
+              <p className="text-terza-gray text-sm">Sin ventas registradas</p>
+            )}
           </div>
         </div>
       </div>

@@ -1,4 +1,5 @@
 const { query } = require('./db')
+const { upsertSaleFromMeliOrder } = require('./sales')
 
 function toJson(value) {
   return value ? JSON.stringify(value) : null
@@ -162,6 +163,12 @@ async function upsertOrder(order, meliUserId) {
         Number(line.unit_price) || 0,
       ]
     )
+  }
+
+  try {
+    await upsertSaleFromMeliOrder(order, meliUserId)
+  } catch (err) {
+    console.error('[meli] sale sync order', order.id, err.message)
   }
 }
 

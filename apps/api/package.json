@@ -8,6 +8,7 @@
     "dev": "nodemon src/index.js",
     "start": "node src/index.js",
     "db:migrate": "node scripts/migrate.mjs",
+    "db:cleanup": "node scripts/cleanup-dummy-data.mjs",
     "db:seed-admin": "node scripts/seed-admin.mjs",
     "lint": "echo 'No lint'"
   },

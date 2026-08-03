@@ -253,3 +253,47 @@ CREATE INDEX IF NOT EXISTS idx_meli_questions_user ON meli_questions(meli_user_i
 CREATE INDEX IF NOT EXISTS idx_meli_questions_status ON meli_questions(status);
 CREATE INDEX IF NOT EXISTS idx_meli_metrics_user_date ON meli_metrics_daily(meli_user_id, metric_date DESC);
 CREATE INDEX IF NOT EXISTS idx_meli_sync_runs_started ON meli_sync_runs(started_at DESC);
+
+-- Ventas consolidadas (todos los canales)
+CREATE TABLE IF NOT EXISTS sales (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  channel VARCHAR(30) NOT NULL CHECK (channel IN ('mercadolibre', 'whatsapp', 'facebook', 'presencial')),
+  external_id VARCHAR(255),
+  customer_name VARCHAR(255),
+  customer_contact VARCHAR(255),
+  status VARCHAR(50) NOT NULL DEFAULT 'completed',
+  total_amount DECIMAL(12, 2) NOT NULL DEFAULT 0,
+  currency_id VARCHAR(10) NOT NULL DEFAULT 'ARS',
+  notes TEXT,
+  sale_date TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_sales_channel_external
+  ON sales(channel, external_id) WHERE external_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS sale_items (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  sale_id UUID NOT NULL REFERENCES sales(id) ON DELETE CASCADE,
+  product_id UUID REFERENCES products(id) ON DELETE SET NULL,
+  description VARCHAR(500),
+  quantity INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),
+  unit_price DECIMAL(12, 2) NOT NULL DEFAULT 0,
+  line_total DECIMAL(12, 2) NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_sales_channel ON sales(channel);
+CREATE INDEX IF NOT EXISTS idx_sales_date ON sales(sale_date);
+CREATE INDEX IF NOT EXISTS idx_sales_status ON sales(status);
+CREATE INDEX IF NOT EXISTS idx_sale_items_sale ON sale_items(sale_id);
+CREATE INDEX IF NOT EXISTS idx_sale_items_product ON sale_items(product_id);
+
+ALTER TABLE meli_orders ADD COLUMN IF NOT EXISTS sale_id UUID REFERENCES sales(id) ON DELETE SET NULL;
+ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS sale_id UUID REFERENCES sales(id) ON DELETE SET NULL;
+ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS channel VARCHAR(30);
+
+DROP TRIGGER IF EXISTS sales_updated_at ON sales;
+CREATE TRIGGER sales_updated_at
+  BEFORE UPDATE ON sales
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at();
