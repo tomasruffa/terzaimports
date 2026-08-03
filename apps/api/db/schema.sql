@@ -292,6 +292,7 @@ CREATE INDEX IF NOT EXISTS idx_sale_items_product ON sale_items(product_id);
 ALTER TABLE meli_orders ADD COLUMN IF NOT EXISTS sale_id UUID REFERENCES sales(id) ON DELETE SET NULL;
 ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS sale_id UUID REFERENCES sales(id) ON DELETE SET NULL;
 ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS channel VARCHAR(30);
+ALTER TABLE sales ADD COLUMN IF NOT EXISTS kapso_notified_at TIMESTAMPTZ;
 
 DROP TRIGGER IF EXISTS sales_updated_at ON sales;
 CREATE TRIGGER sales_updated_at

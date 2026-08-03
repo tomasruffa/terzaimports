@@ -286,6 +286,7 @@ module.exports = {
   runFullSync,
   syncMetricsSnapshot,
   getMetricsSummary,
+  syncOrders,
   syncOrderById,
   syncQuestionById,
 }

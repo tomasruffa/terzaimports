@@ -5,8 +5,10 @@ const {
   createSale,
   backfillMeliSales,
   getConsolidatedDashboard,
-  notifySaleCreated,
+  notifySaleIfNeeded,
+  notifyPendingSales,
 } = require('../lib/sales')
+const { syncOrders } = require('../lib/meli-data-sync')
 const { getTokenRow } = require('../lib/meli')
 const requireAuth = require('../middleware/auth')
 
@@ -116,25 +118,10 @@ router.post('/', async (req, res) => {
   }
 })
 
-router.post('/notify-latest', async (_req, res) => {
+router.post('/notify-latest', async (req, res) => {
   try {
     const { rows } = await getPool().query(
-      `SELECT s.*,
-         COALESCE(
-           json_agg(
-             json_build_object(
-               'description', si.description,
-               'quantity', si.quantity,
-               'unit_price', si.unit_price
-             )
-           ) FILTER (WHERE si.id IS NOT NULL),
-           '[]'
-         ) AS items
-       FROM sales s
-       LEFT JOIN sale_items si ON si.sale_id = s.id
-       GROUP BY s.id
-       ORDER BY s.sale_date DESC
-       LIMIT 1`
+      `SELECT id FROM sales ORDER BY sale_date DESC LIMIT 1`
     )
 
     const sale = rows[0]
@@ -142,7 +129,7 @@ router.post('/notify-latest', async (_req, res) => {
       return res.status(404).json({ ok: false, error: 'No hay ventas registradas' })
     }
 
-    const result = await notifySaleCreated(sale, sale.items || [])
+    const result = await notifySaleIfNeeded(sale.id, { force: Boolean(req.body?.force) })
     if (result?.error) {
       return res.status(422).json({
         ok: false,
@@ -152,6 +139,22 @@ router.post('/notify-latest', async (_req, res) => {
     }
 
     res.json({ ok: true, sale_id: sale.id, kapso: result })
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message })
+  }
+})
+
+router.post('/sync-and-notify', async (_req, res) => {
+  try {
+    const tokenRow = await getTokenRow()
+    if (!tokenRow) {
+      return res.status(400).json({ ok: false, error: 'No hay cuenta de Mercado Libre vinculada' })
+    }
+
+    const orders = await syncOrders(tokenRow.meli_user_id)
+    const notifications = await notifyPendingSales({ hours: 72 })
+
+    res.json({ ok: true, orders, notifications })
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message })
   }

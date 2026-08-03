@@ -45,9 +45,63 @@ function formatSaleNotificationMessage(sale, items = []) {
   )
 }
 
+async function loadSaleWithItems(saleId) {
+  const { rows } = await getPool().query(
+    `SELECT s.*,
+       COALESCE(
+         json_agg(
+           json_build_object(
+             'description', si.description,
+             'quantity', si.quantity,
+             'unit_price', si.unit_price
+           )
+         ) FILTER (WHERE si.id IS NOT NULL),
+         '[]'
+       ) AS items
+     FROM sales s
+     LEFT JOIN sale_items si ON si.sale_id = s.id
+     WHERE s.id = $1
+     GROUP BY s.id`,
+    [saleId]
+  )
+  return rows[0] ?? null
+}
+
+async function notifySaleIfNeeded(saleId, { force = false } = {}) {
+  const sale = await loadSaleWithItems(saleId)
+  if (!sale || sale.status !== 'completed') return { skipped: true, reason: 'not_completed' }
+  if (!force && sale.kapso_notified_at) return { skipped: true, reason: 'already_notified' }
+
+  const result = await notifyAdmin(formatSaleNotificationMessage(sale, sale.items))
+  if (result?.error || result?.skipped) return result
+
+  await getPool().query('UPDATE sales SET kapso_notified_at = NOW() WHERE id = $1', [saleId])
+  return result
+}
+
 async function notifySaleCreated(sale, items = []) {
-  if (!sale || sale.status !== 'completed') return { skipped: true }
-  return notifyAdmin(formatSaleNotificationMessage(sale, items))
+  if (!sale?.id) {
+    if (!sale || sale.status !== 'completed') return { skipped: true }
+    return notifyAdmin(formatSaleNotificationMessage(sale, items))
+  }
+  return notifySaleIfNeeded(sale.id)
+}
+
+async function notifyPendingSales({ hours = 48 } = {}) {
+  const { rows } = await getPool().query(
+    `SELECT id FROM sales
+     WHERE status = 'completed'
+       AND kapso_notified_at IS NULL
+       AND sale_date >= NOW() - ($1::text || ' hours')::interval
+     ORDER BY sale_date DESC`,
+    [String(hours)]
+  )
+
+  const results = []
+  for (const row of rows) {
+    results.push({ sale_id: row.id, ...(await notifySaleIfNeeded(row.id)) })
+  }
+  return results
 }
 
 async function findProductByMeliItemId(meliItemId) {
@@ -176,7 +230,7 @@ async function createSale({
     await client.query('COMMIT')
 
     if (status === 'completed') {
-      notifySaleCreated(sale, normalizedItems).catch((err) =>
+      notifySaleIfNeeded(sale.id).catch((err) =>
         console.error('[sales] kapso notify failed', err.message)
       )
     }
@@ -232,6 +286,12 @@ async function upsertSaleFromMeliOrder(order, meliUserId) {
       result.sale_id,
       order.id,
     ])
+
+    if (mapMeliStatus(order.status) === 'completed') {
+      notifySaleIfNeeded(result.sale_id).catch((err) =>
+        console.error('[sales] meli kapso notify failed', order.id, err.message)
+      )
+    }
   }
 
   return result
@@ -333,4 +393,6 @@ module.exports = {
   getConsolidatedDashboard,
   formatSaleNotificationMessage,
   notifySaleCreated,
+  notifySaleIfNeeded,
+  notifyPendingSales,
 }
