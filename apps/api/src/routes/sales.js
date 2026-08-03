@@ -5,6 +5,7 @@ const {
   createSale,
   backfillMeliSales,
   getConsolidatedDashboard,
+  notifySaleCreated,
 } = require('../lib/sales')
 const { getTokenRow } = require('../lib/meli')
 const requireAuth = require('../middleware/auth')
@@ -112,6 +113,47 @@ router.post('/', async (req, res) => {
   } catch (err) {
     console.error('[sales/create]', err)
     res.status(400).json({ data: null, error: err.message })
+  }
+})
+
+router.post('/notify-latest', async (_req, res) => {
+  try {
+    const { rows } = await getPool().query(
+      `SELECT s.*,
+         COALESCE(
+           json_agg(
+             json_build_object(
+               'description', si.description,
+               'quantity', si.quantity,
+               'unit_price', si.unit_price
+             )
+           ) FILTER (WHERE si.id IS NOT NULL),
+           '[]'
+         ) AS items
+       FROM sales s
+       LEFT JOIN sale_items si ON si.sale_id = s.id
+       GROUP BY s.id
+       ORDER BY s.sale_date DESC
+       LIMIT 1`
+    )
+
+    const sale = rows[0]
+    if (!sale) {
+      return res.status(404).json({ ok: false, error: 'No hay ventas registradas' })
+    }
+
+    const result = await notifySaleCreated(sale, sale.items || [])
+    if (result?.error) {
+      return res.status(422).json({
+        ok: false,
+        error: result.error,
+        hint: 'Enviá cualquier mensaje al WhatsApp de Terza (+1 207-670-1813) para abrir la ventana de 24h, o creá un template aprobado en Kapso.',
+      })
+    }
+
+    res.json({ ok: true, sale_id: sale.id, kapso: result })
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message })
   }
 })
 

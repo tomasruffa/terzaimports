@@ -1,6 +1,14 @@
 const { getPool } = require('./db')
+const { notifyAdmin } = require('./kapso')
 
 const SALES_CHANNELS = ['mercadolibre', 'whatsapp', 'facebook', 'presencial']
+
+const CHANNEL_LABELS = {
+  mercadolibre: 'Mercado Libre',
+  whatsapp: 'WhatsApp',
+  facebook: 'Facebook',
+  presencial: 'Presencial',
+}
 
 const MELI_COUNTED_STATUSES = new Set(['paid', 'confirmed'])
 
@@ -8,6 +16,38 @@ function mapMeliStatus(status) {
   if (MELI_COUNTED_STATUSES.has(status)) return 'completed'
   if (status === 'cancelled') return 'cancelled'
   return 'pending'
+}
+
+function formatMoney(value, currency = 'ARS') {
+  return new Intl.NumberFormat('es-AR', {
+    style: 'currency',
+    currency,
+    maximumFractionDigits: 0,
+  }).format(Number(value) || 0)
+}
+
+function formatSaleNotificationMessage(sale, items = []) {
+  const fecha = new Date(sale.sale_date).toLocaleString('es-AR', {
+    timeZone: 'America/Argentina/Buenos_Aires',
+  })
+  const lines = (items || []).map(
+    (i) => `  • ${i.quantity}x ${i.description} — ${formatMoney(i.unit_price, sale.currency_id)}`
+  )
+
+  return (
+    `🛍️ Nueva venta — Terza Imports\n\n` +
+    `Canal: ${CHANNEL_LABELS[sale.channel] || sale.channel}\n` +
+    `Cliente: ${sale.customer_name || sale.customer_contact || '—'}\n` +
+    `Total: ${formatMoney(sale.total_amount, sale.currency_id)}\n` +
+    `Estado: ${sale.status}\n` +
+    `Fecha: ${fecha}\n\n` +
+    `Ítems:\n${lines.join('\n') || '  —'}`
+  )
+}
+
+async function notifySaleCreated(sale, items = []) {
+  if (!sale || sale.status !== 'completed') return { skipped: true }
+  return notifyAdmin(formatSaleNotificationMessage(sale, items))
 }
 
 async function findProductByMeliItemId(meliItemId) {
@@ -134,6 +174,13 @@ async function createSale({
     }
 
     await client.query('COMMIT')
+
+    if (status === 'completed') {
+      notifySaleCreated(sale, normalizedItems).catch((err) =>
+        console.error('[sales] kapso notify failed', err.message)
+      )
+    }
+
     return { sale_id: sale.id, sale, created: true }
   } catch (err) {
     await client.query('ROLLBACK')
@@ -279,8 +326,11 @@ async function getConsolidatedDashboard() {
 
 module.exports = {
   SALES_CHANNELS,
+  CHANNEL_LABELS,
   createSale,
   upsertSaleFromMeliOrder,
   backfillMeliSales,
   getConsolidatedDashboard,
+  formatSaleNotificationMessage,
+  notifySaleCreated,
 }
