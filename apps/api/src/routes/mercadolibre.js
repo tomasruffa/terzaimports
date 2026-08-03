@@ -1,10 +1,11 @@
 const crypto = require('crypto')
 const express = require('express')
 const { saveTokens, refreshAllTokens, getTokenRow } = require('../lib/meli')
-const { importUserItems } = require('../lib/meli-sync')
+const { runFullSync, getMetricsSummary } = require('../lib/meli-data-sync')
 const { processMeliNotification } = require('../lib/meli-notifications')
 const { isConfigured: isKapsoConfigured } = require('../lib/kapso')
 const requireAuth = require('../middleware/auth')
+const { query } = require('../lib/db')
 
 const router = express.Router()
 
@@ -263,13 +264,174 @@ router.post('/refresh-tokens', requireCronOrAuth, async (_req, res) => {
   }
 })
 
-/** Importa publicaciones activas de ML al catálogo local */
-router.post('/sync', requireAuth, async (req, res) => {
+/** Sincroniza toda la data y métricas de Mercado Libre a PostgreSQL */
+router.post('/sync', requireCronOrAuth, async (req, res) => {
   try {
-    const result = await importUserItems(req.body?.meli_user_id)
-    res.json({ ok: true, ...result })
+    const tokenRow = await getTokenRow(req.body?.meli_user_id)
+    if (!tokenRow) {
+      return res.status(400).json({ ok: false, error: 'No hay cuenta de Mercado Libre vinculada' })
+    }
+
+    const result = await runFullSync(tokenRow.meli_user_id)
+    res.json(result)
   } catch (err) {
     console.error('[meli] sync', err)
+    res.status(500).json({ ok: false, error: err.message })
+  }
+})
+
+/** Métricas y resumen desde la DB local */
+router.get('/metrics', requireAuth, async (req, res) => {
+  try {
+    const tokenRow = await getTokenRow()
+    if (!tokenRow) {
+      return res.status(400).json({ ok: false, error: 'No hay cuenta de Mercado Libre vinculada' })
+    }
+
+    const metrics = await getMetricsSummary(tokenRow.meli_user_id)
+    res.json({ ok: true, data: metrics })
+  } catch (err) {
+    console.error('[meli] metrics', err)
+    res.status(500).json({ ok: false, error: err.message })
+  }
+})
+
+/** Publicaciones sincronizadas desde ML */
+router.get('/items', requireAuth, async (req, res) => {
+  try {
+    const tokenRow = await getTokenRow()
+    if (!tokenRow) {
+      return res.status(400).json({ ok: false, error: 'No hay cuenta de Mercado Libre vinculada' })
+    }
+
+    const { status, page = 1, limit = 20 } = req.query
+    const pageNum = Math.max(1, Number(page) || 1)
+    const limitNum = Math.min(100, Math.max(1, Number(limit) || 20))
+    const offset = (pageNum - 1) * limitNum
+    const params = [tokenRow.meli_user_id]
+    let where = 'WHERE meli_user_id = $1'
+
+    if (status) {
+      params.push(status)
+      where += ` AND status = $${params.length}`
+    }
+
+    const count = await query(`SELECT COUNT(*)::int AS total FROM meli_items ${where}`, params)
+    const { rows } = await query(
+      `SELECT * FROM meli_items ${where}
+       ORDER BY synced_at DESC
+       LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+      [...params, limitNum, offset]
+    )
+
+    res.json({
+      ok: true,
+      data: rows,
+      total: count.rows[0].total,
+      page: pageNum,
+      limit: limitNum,
+    })
+  } catch (err) {
+    console.error('[meli] items', err)
+    res.status(500).json({ ok: false, error: err.message })
+  }
+})
+
+/** Órdenes sincronizadas desde ML */
+router.get('/orders', requireAuth, async (req, res) => {
+  try {
+    const tokenRow = await getTokenRow()
+    if (!tokenRow) {
+      return res.status(400).json({ ok: false, error: 'No hay cuenta de Mercado Libre vinculada' })
+    }
+
+    const { status, page = 1, limit = 20 } = req.query
+    const pageNum = Math.max(1, Number(page) || 1)
+    const limitNum = Math.min(100, Math.max(1, Number(limit) || 20))
+    const offset = (pageNum - 1) * limitNum
+    const params = [tokenRow.meli_user_id]
+    let countWhere = 'WHERE meli_user_id = $1'
+    let where = 'WHERE o.meli_user_id = $1'
+
+    if (status) {
+      params.push(status)
+      countWhere += ` AND status = $${params.length}`
+      where += ` AND o.status = $${params.length}`
+    }
+
+    const count = await query(`SELECT COUNT(*)::int AS total FROM meli_orders ${countWhere}`, params)
+    const { rows } = await query(
+      `SELECT o.*,
+         COALESCE(
+           json_agg(
+             json_build_object(
+               'meli_item_id', oi.meli_item_id,
+               'title', oi.title,
+               'quantity', oi.quantity,
+               'unit_price', oi.unit_price
+             )
+           ) FILTER (WHERE oi.id IS NOT NULL),
+           '[]'
+         ) AS items
+       FROM meli_orders o
+       LEFT JOIN meli_order_items oi ON oi.meli_order_id = o.meli_order_id
+       ${where}
+       GROUP BY o.meli_order_id
+       ORDER BY o.date_created DESC NULLS LAST
+       LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+      [...params, limitNum, offset]
+    )
+
+    res.json({
+      ok: true,
+      data: rows,
+      total: count.rows[0].total,
+      page: pageNum,
+      limit: limitNum,
+    })
+  } catch (err) {
+    console.error('[meli] orders', err)
+    res.status(500).json({ ok: false, error: err.message })
+  }
+})
+
+/** Preguntas sincronizadas desde ML */
+router.get('/questions', requireAuth, async (req, res) => {
+  try {
+    const tokenRow = await getTokenRow()
+    if (!tokenRow) {
+      return res.status(400).json({ ok: false, error: 'No hay cuenta de Mercado Libre vinculada' })
+    }
+
+    const { status, page = 1, limit = 20 } = req.query
+    const pageNum = Math.max(1, Number(page) || 1)
+    const limitNum = Math.min(100, Math.max(1, Number(limit) || 20))
+    const offset = (pageNum - 1) * limitNum
+    const params = [tokenRow.meli_user_id]
+    let where = 'WHERE meli_user_id = $1'
+
+    if (status) {
+      params.push(status)
+      where += ` AND status = $${params.length}`
+    }
+
+    const count = await query(`SELECT COUNT(*)::int AS total FROM meli_questions ${where}`, params)
+    const { rows } = await query(
+      `SELECT * FROM meli_questions ${where}
+       ORDER BY date_created DESC NULLS LAST
+       LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+      [...params, limitNum, offset]
+    )
+
+    res.json({
+      ok: true,
+      data: rows,
+      total: count.rows[0].total,
+      page: pageNum,
+      limit: limitNum,
+    })
+  } catch (err) {
+    console.error('[meli] questions', err)
     res.status(500).json({ ok: false, error: err.message })
   }
 })

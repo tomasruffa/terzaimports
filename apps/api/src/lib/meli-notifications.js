@@ -2,6 +2,8 @@ const { query } = require('./db')
 const { meliFetch } = require('./meli')
 const { notifyAdmin } = require('./kapso')
 const { syncItemFromMeli, maybeNotifyLowStock } = require('./meli-sync')
+const { syncOrderById, syncQuestionById } = require('./meli-data-sync')
+const { upsertPayment } = require('./meli-repository')
 
 async function markNotificationProcessed(notificationId, topic, resource) {
   const { rowCount } = await query(
@@ -23,7 +25,7 @@ async function handleOrdersV2(resource, meliUserId) {
   const orderId = extractResourceId(resource, 'orders')
   if (!orderId) return
 
-  const order = await meliFetch(resource.startsWith('/') ? resource : `/${resource}`, {}, meliUserId)
+  const order = await syncOrderById(orderId, meliUserId)
   const total = order.total_amount ?? order.paid_amount
   const status = order.status
   const buyer = order.buyer?.nickname || order.buyer?.id || 'comprador'
@@ -41,7 +43,7 @@ async function handleQuestion(resource, meliUserId) {
   const questionId = extractResourceId(resource, 'questions')
   if (!questionId) return
 
-  const question = await meliFetch(resource.startsWith('/') ? resource : `/${resource}`, {}, meliUserId)
+  const question = await syncQuestionById(questionId, meliUserId)
 
   await notifyAdmin(
     `❓ Nueva pregunta en Mercado Libre\n` +
@@ -63,6 +65,7 @@ async function handlePayment(resource, meliUserId) {
   if (!paymentId) return
 
   const payment = await meliFetch(resource.startsWith('/') ? resource : `/${resource}`, {}, meliUserId)
+  await upsertPayment(payment, meliUserId)
 
   await notifyAdmin(
     `💳 Pago en Mercado Libre\n` +
