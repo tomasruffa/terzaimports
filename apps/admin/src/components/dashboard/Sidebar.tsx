@@ -1,13 +1,14 @@
 'use client'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, Package, ArrowLeftRight, BarChart3, CreditCard, Globe, ChevronRight } from 'lucide-react'
+import { LayoutDashboard, Package, ArrowLeftRight, BarChart3, CreditCard, Globe, ChevronRight, ShoppingBag } from 'lucide-react'
 
 const navItems = [
   { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { href: '/dashboard/products', icon: Package, label: 'Productos' },
   { href: '/dashboard/stock', icon: ArrowLeftRight, label: 'Movimientos' },
   { href: '/dashboard/expenses', icon: CreditCard, label: 'Gastos' },
+  { href: '/dashboard/mercadolibre', icon: ShoppingBag, label: 'Mercado Libre' },
   { href: '/dashboard/reports', icon: BarChart3, label: 'Reportes' },
 ]
 

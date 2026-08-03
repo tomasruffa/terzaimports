@@ -8,6 +8,8 @@ const titles: Record<string, string> = {
   '/dashboard': 'Dashboard',
   '/dashboard/products': 'Productos',
   '/dashboard/stock': 'Movimientos de Stock',
+  '/dashboard/expenses': 'Gastos',
+  '/dashboard/mercadolibre': 'Mercado Libre',
   '/dashboard/reports': 'Reportes',
 }
 
