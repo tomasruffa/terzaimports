@@ -1,32 +1,10 @@
 const { query, getPool } = require('./db')
 
-function productFingerprint(title) {
-  return String(title || '')
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/\b\d+\s*x\b/gi, '')
-    .replace(/\b\d+\s*cuotas?\b/gi, '')
-    .replace(/\bsin\s*interes\b/gi, '')
-    .replace(/\bmercado\s*pago\b/gi, '')
-    .replace(/\bfree\b/gi, '')
-    .replace(/\bgold\b/gi, '')
-    .replace(/\bclasic[ao]\b/gi, '')
-    .replace(/\bspecial\b/gi, '')
-    .replace(/\bpro\b/gi, '')
-    .replace(/[^a-z0-9]+/g, ' ')
-    .replace(/\s+/g, ' ')
+function normalizeSku(value) {
+  return String(value || '')
     .trim()
-}
-
-function inventorySkuFromFingerprint(fingerprint) {
-  const words = fingerprint
-    .split(' ')
-    .filter((w) => w.length > 2 && !['gafas', 'anteojos', 'sol', 'de', 'meta', 'gen'].includes(w))
-    .slice(0, 5)
-
-  const base = words.length ? words.join('-') : fingerprint.slice(0, 40)
-  return `INV-${base.toUpperCase().replace(/[^A-Z0-9-]/g, '-').replace(/-+/g, '-')}`.slice(0, 90)
+    .toUpperCase()
+    .replace(/\s+/g, '-')
 }
 
 function listingLabel(item) {
@@ -37,17 +15,42 @@ function listingLabel(item) {
   return type || 'ML'
 }
 
-async function findProductByInventorySku(inventorySku) {
+function isGeneratedSku(sku) {
+  const normalized = normalizeSku(sku)
+  return normalized.startsWith('INV-') || normalized.startsWith('MELI-') || normalized.startsWith('MLA')
+}
+
+async function findProductBySku(sku, { activeOnly = true } = {}) {
+  const normalized = normalizeSku(sku)
+  if (!normalized) return null
+
+  const activeClause = activeOnly ? 'AND active = true' : ''
   const { rows } = await query(
-    'SELECT * FROM products WHERE inventory_sku = $1 AND active = true LIMIT 1',
-    [inventorySku]
+    `SELECT * FROM products
+     WHERE UPPER(TRIM(sku)) = $1 ${activeClause}
+     ORDER BY active DESC, updated_at DESC
+     LIMIT 1`,
+    [normalized]
   )
   return rows[0] ?? null
 }
 
+async function addMeliIdToProduct(productId, meliItemId) {
+  const { rows } = await query('SELECT external_ids FROM products WHERE id = $1', [productId])
+  const current = rows[0]?.external_ids || {}
+  const meliList = Array.isArray(current.meli) ? current.meli : current.meli ? [current.meli] : []
+  if (!meliList.includes(meliItemId)) {
+    meliList.push(meliItemId)
+  }
+  await query(
+    'UPDATE products SET external_ids = $1, updated_at = NOW() WHERE id = $2',
+    [JSON.stringify({ ...current, meli: meliList }), productId]
+  )
+}
+
 async function getMeliListingsForProduct(productId) {
   const { rows } = await query(
-    `SELECT meli_item_id, title, price, status, listing_type_id, available_quantity, permalink, thumbnail
+    `SELECT meli_item_id, title, price, status, listing_type_id, available_quantity, permalink, thumbnail, seller_sku
      FROM meli_items WHERE product_id = $1 ORDER BY price ASC`,
     [productId]
   )
@@ -60,97 +63,120 @@ async function linkMeliItemToProduct(meliItemId, productId) {
     'UPDATE products SET meli_item_id = NULL, updated_at = NOW() WHERE meli_item_id = $1 AND id <> $2',
     [meliItemId, productId]
   )
+  await addMeliIdToProduct(productId, meliItemId)
 }
 
-async function consolidateDuplicateProducts({ dryRun = false } = {}) {
+async function mergeDuplicateProducts(canonicalId, duplicateIds, { stock, sku } = {}) {
+  const client = await getPool().connect()
+  try {
+    await client.query('BEGIN')
+
+    if (sku) {
+      await client.query(
+        'UPDATE products SET sku = $1, inventory_sku = $1, updated_at = NOW() WHERE id = $2',
+        [sku, canonicalId]
+      )
+    }
+
+    if (stock != null) {
+      await client.query(
+        'UPDATE products SET stock_quantity = $1, updated_at = NOW() WHERE id = $2',
+        [stock, canonicalId]
+      )
+    }
+
+    for (const dupId of duplicateIds) {
+      await client.query('UPDATE sale_items SET product_id = $1 WHERE product_id = $2', [canonicalId, dupId])
+      await client.query('UPDATE stock_movements SET product_id = $1 WHERE product_id = $2', [canonicalId, dupId])
+      await client.query(
+        `UPDATE products SET active = false, meli_item_id = NULL, inventory_sku = NULL, updated_at = NOW()
+         WHERE id = $1`,
+        [dupId]
+      )
+    }
+
+    await client.query('UPDATE products SET meli_item_id = NULL WHERE id = $1', [canonicalId])
+    await client.query('COMMIT')
+    return true
+  } catch (err) {
+    await client.query('ROLLBACK')
+    throw err
+  } finally {
+    client.release()
+  }
+}
+
+async function consolidateProductsBySku({ dryRun = false } = {}) {
   const { rows: items } = await query(
-    `SELECT mi.meli_item_id, mi.title, mi.price, mi.listing_type_id, mi.available_quantity,
-            mi.product_id, mi.status, p.id AS pid, p.name, p.stock_quantity, p.inventory_sku
+    `SELECT mi.meli_item_id, mi.seller_sku, mi.product_id, mi.available_quantity, mi.status,
+            p.id AS pid, p.sku, p.stock_quantity
      FROM meli_items mi
-     LEFT JOIN products p ON p.id = mi.product_id
-     ORDER BY mi.title`
+     LEFT JOIN products p ON p.id = mi.product_id`
   )
 
   const groups = new Map()
   for (const row of items) {
-    const fp = productFingerprint(row.title)
-    if (!groups.has(fp)) groups.set(fp, [])
-    groups.get(fp).push(row)
+    const sku = normalizeSku(row.seller_sku) || normalizeSku(row.sku)
+    if (!sku) continue
+    if (!groups.has(sku)) groups.set(sku, [])
+    groups.get(sku).push(row)
   }
 
   const results = []
 
-  for (const [fingerprint, group] of groups) {
-    if (group.length < 2) continue
-
-    const inventorySku = inventorySkuFromFingerprint(fingerprint)
+  for (const [sku, group] of groups) {
     const productIds = [...new Set(group.map((g) => g.product_id).filter(Boolean))]
 
-    const canonicalId =
-      group.find((g) => g.inventory_sku === inventorySku)?.product_id ||
+    let canonicalId =
+      group.find((g) => g.pid && normalizeSku(g.sku) === sku)?.pid ||
       productIds[0]
+
+    if (!canonicalId) {
+      const bySku = await findProductBySku(sku, { activeOnly: false })
+      canonicalId = bySku?.id
+    }
 
     if (!canonicalId) continue
 
     const duplicateIds = productIds.filter((id) => id !== canonicalId)
     const stock = Math.max(
-      ...group.map((g) => Number(g.stock_quantity) || Number(g.available_quantity) || 0)
+      ...group.map((g) => Number(g.stock_quantity) || Number(g.available_quantity) || 0),
+      0
     )
 
     const action = {
-      fingerprint,
-      inventory_sku: inventorySku,
+      sku,
       canonical_id: canonicalId,
       duplicate_ids: duplicateIds,
       listings: group.map((g) => g.meli_item_id),
       stock,
+      listing_count: group.length,
     }
 
-    if (!dryRun) {
-      const client = await getPool().connect()
+    const needsLink = group.some((g) => g.product_id !== canonicalId)
+    const needsMerge = duplicateIds.length > 0
+    const needsSkuUpdate = Boolean(sku && canonicalId)
+
+    if (!dryRun && (needsLink || needsMerge || needsSkuUpdate)) {
       try {
-        await client.query('BEGIN')
-
-        await client.query(
-          'UPDATE products SET inventory_sku = $1, stock_quantity = $2, updated_at = NOW() WHERE id = $3',
-          [inventorySku, stock, canonicalId]
-        )
-
         for (const meliItemId of action.listings) {
-          await client.query(
-            'UPDATE meli_items SET product_id = $1 WHERE meli_item_id = $2',
-            [canonicalId, meliItemId]
+          await linkMeliItemToProduct(meliItemId, canonicalId)
+          await query(
+            'UPDATE meli_items SET seller_sku = $1 WHERE meli_item_id = $2',
+            [sku, meliItemId]
           )
         }
-
-        for (const dupId of duplicateIds) {
-          await client.query(
-            'UPDATE sale_items SET product_id = $1 WHERE product_id = $2',
-            [canonicalId, dupId]
-          )
-          await client.query(
-            'UPDATE stock_movements SET product_id = $1 WHERE product_id = $2',
-            [canonicalId, dupId]
-          )
-          await client.query(
-            `UPDATE products SET active = false, meli_item_id = NULL, inventory_sku = NULL, updated_at = NOW()
-             WHERE id = $1`,
-            [dupId]
+        if (needsMerge) {
+          await mergeDuplicateProducts(canonicalId, duplicateIds, { stock, sku })
+        } else {
+          await query(
+            'UPDATE products SET sku = $1, inventory_sku = $1, stock_quantity = $2, active = true, updated_at = NOW() WHERE id = $3',
+            [sku, stock, canonicalId]
           )
         }
-
-        await client.query(
-          'UPDATE products SET meli_item_id = NULL WHERE id = $1',
-          [canonicalId]
-        )
-
-        await client.query('COMMIT')
         action.merged = true
       } catch (err) {
-        await client.query('ROLLBACK')
         action.error = err.message
-      } finally {
-        client.release()
       }
     }
 
@@ -160,12 +186,19 @@ async function consolidateDuplicateProducts({ dryRun = false } = {}) {
   return results
 }
 
+/** Consolidación de productos — siempre por SKU (alias para compatibilidad). */
+async function consolidateDuplicateProducts(options = {}) {
+  return consolidateProductsBySku(options)
+}
+
 module.exports = {
-  productFingerprint,
-  inventorySkuFromFingerprint,
+  normalizeSku,
+  isGeneratedSku,
   listingLabel,
-  findProductByInventorySku,
+  findProductBySku,
+  addMeliIdToProduct,
   getMeliListingsForProduct,
   linkMeliItemToProduct,
+  consolidateProductsBySku,
   consolidateDuplicateProducts,
 }

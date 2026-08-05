@@ -13,6 +13,12 @@ export interface Product {
   origin_country: string | null
   image_url: string | null
   active: boolean
+  meli_item_id?: string | null
+  meli_permalink?: string | null
+  meli_last_synced_at?: string | null
+  inventory_sku?: string | null
+  external_ids?: Record<string, string | string[]>
+  meli_listings_count?: number
   created_at: string
   updated_at: string
 }

@@ -1,5 +1,6 @@
 const { query } = require('./db')
 const { upsertSaleFromMeliOrder } = require('./sales')
+const { normalizeSku } = require('./product-consolidation')
 
 function toJson(value) {
   return value ? JSON.stringify(value) : null
@@ -52,14 +53,17 @@ async function upsertAccount(user) {
 }
 
 async function upsertItem(item, meliUserId, visits = {}) {
+  const sellerSku = normalizeSku(item.seller_custom_field) || null
+
   const { rows } = await query(
     `INSERT INTO meli_items (
-       meli_item_id, meli_user_id, title, category_id, price, currency_id,
+       meli_item_id, meli_user_id, seller_sku, title, category_id, price, currency_id,
        available_quantity, sold_quantity, status, listing_type_id, item_condition,
        permalink, thumbnail, health, visits_total, visits_last_30d, raw, synced_at
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,NOW())
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,NOW())
      ON CONFLICT (meli_item_id) DO UPDATE SET
        meli_user_id = EXCLUDED.meli_user_id,
+       seller_sku = COALESCE(EXCLUDED.seller_sku, meli_items.seller_sku),
        title = EXCLUDED.title,
        category_id = EXCLUDED.category_id,
        price = EXCLUDED.price,
@@ -80,6 +84,7 @@ async function upsertItem(item, meliUserId, visits = {}) {
     [
       item.id,
       meliUserId,
+      sellerSku,
       item.title,
       item.category_id ?? null,
       Number(item.price) || 0,
@@ -104,6 +109,18 @@ async function upsertItem(item, meliUserId, visits = {}) {
      WHERE mi.meli_item_id = p.meli_item_id AND mi.meli_item_id = $1`,
     [item.id]
   )
+
+  if (sellerSku) {
+    await query(
+      `UPDATE meli_items mi SET product_id = p.id
+       FROM products p
+       WHERE mi.meli_item_id = $1
+         AND mi.product_id IS NULL
+         AND p.active = true
+         AND UPPER(TRIM(p.sku)) = $2`,
+      [item.id, sellerSku]
+    )
+  }
 
   return rows[0]
 }

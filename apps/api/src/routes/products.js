@@ -53,12 +53,17 @@ const PRODUCT_FIELDS = [
   'image_url',
   'images',
   'active',
+  'external_ids',
 ]
 
 function pickProductFields(body) {
   const data = {}
   for (const key of PRODUCT_FIELDS) {
-    if (body[key] !== undefined) data[key] = body[key]
+    if (body[key] !== undefined) {
+      data[key] = key === 'external_ids' && typeof body[key] === 'object'
+        ? JSON.stringify(body[key])
+        : body[key]
+    }
   }
   return data
 }
@@ -148,7 +153,8 @@ router.get('/:id', async (req, res) => {
 router.post('/consolidate', requireAuth, async (_req, res) => {
   try {
     const results = await consolidateDuplicateProducts()
-    res.json({ ok: true, groups_merged: results.length, results })
+    const merged = results.filter((r) => r.merged).length
+    res.json({ ok: true, groups_merged: merged, results })
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message })
   }

@@ -1,17 +1,26 @@
 'use client'
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { AlertCircle, Loader } from 'lucide-react'
 import { apiFetch } from '@/utils/apiFetch'
-import { setAuth } from '@/utils/authStorage'
+import { clearAuth, setAuth } from '@/utils/authStorage'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [sessionExpired, setSessionExpired] = useState(false)
   const [loading, setLoading] = useState(false)
   const router = useRouter()
+  const searchParams = useSearchParams()
+
+  useEffect(() => {
+    if (searchParams.get('expired') === '1') {
+      clearAuth()
+      setSessionExpired(true)
+    }
+  }, [searchParams])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -57,6 +66,12 @@ export default function LoginPage() {
 
         <div className="bg-terza-navy-light border border-terza-gray-dark/30 rounded-xl p-8 shadow-lg shadow-black/50">
           <form onSubmit={handleLogin} className="space-y-4">
+            {sessionExpired && (
+              <div className="flex items-center gap-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg px-4 py-3 text-yellow-300 text-sm">
+                <AlertCircle size={16} className="flex-shrink-0" />
+                <p>Tu sesión expiró. Volvé a iniciar sesión.</p>
+              </div>
+            )}
             {error && (
               <div className="flex items-center gap-3 bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-3 text-red-400 text-sm">
                 <AlertCircle size={16} className="flex-shrink-0" />

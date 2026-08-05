@@ -111,6 +111,7 @@ ALTER TABLE products ADD COLUMN IF NOT EXISTS meli_permalink TEXT;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS meli_last_synced_at TIMESTAMPTZ;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS inventory_sku VARCHAR(100);
 ALTER TABLE products ADD COLUMN IF NOT EXISTS low_stock_notified_at TIMESTAMPTZ;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS external_ids JSONB NOT NULL DEFAULT '{}';
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_products_inventory_sku
   ON products(inventory_sku) WHERE inventory_sku IS NOT NULL;
@@ -151,6 +152,7 @@ CREATE TABLE IF NOT EXISTS meli_items (
   meli_item_id VARCHAR(50) PRIMARY KEY,
   meli_user_id BIGINT NOT NULL,
   product_id UUID REFERENCES products(id) ON DELETE SET NULL,
+  seller_sku VARCHAR(100),
   title VARCHAR(500) NOT NULL,
   category_id VARCHAR(50),
   price DECIMAL(12, 2),
@@ -168,6 +170,10 @@ CREATE TABLE IF NOT EXISTS meli_items (
   raw JSONB,
   synced_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+ALTER TABLE meli_items ADD COLUMN IF NOT EXISTS seller_sku VARCHAR(100);
+
+CREATE INDEX IF NOT EXISTS idx_meli_items_seller_sku ON meli_items(seller_sku) WHERE seller_sku IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS meli_orders (
   meli_order_id BIGINT PRIMARY KEY,

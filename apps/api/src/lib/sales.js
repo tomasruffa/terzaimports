@@ -1,6 +1,6 @@
 const { getPool } = require('./db')
 const { notifyAdmin } = require('./kapso')
-const { maybeNotifyLowStock } = require('./meli-sync')
+const { maybeNotifyLowStock, syncStockToMeli } = require('./meli-sync')
 
 const SALES_CHANNELS = ['mercadolibre', 'whatsapp', 'facebook', 'presencial']
 
@@ -249,6 +249,9 @@ async function createSale({
         for (const productId of productIds) {
           maybeNotifyLowStock(productId).catch((err) =>
             console.error('[sales] low stock notify failed', err.message)
+          )
+          syncStockToMeli(productId).catch((err) =>
+            console.error('[sales] meli sync failed', err.message)
           )
         }
       }

@@ -12,6 +12,7 @@ const {
 } = require('./meli-repository')
 const { syncItemFromMeli, reconcileStockFromMeliItems } = require('./meli-sync')
 const { backfillMeliSales } = require('./sales')
+const { consolidateProductsBySku } = require('./product-consolidation')
 
 const ITEM_STATUSES = ['active', 'paused', 'closed']
 const ORDERS_LOOKBACK_DAYS = 90
@@ -248,6 +249,7 @@ async function runFullSync(meliUserId) {
     ])
 
     const metrics = await syncMetricsSnapshot(userId)
+    const consolidation = await consolidateProductsBySku()
     const stockReconcile = await reconcileStockFromMeliItems()
     const salesBackfill = await backfillMeliSales(userId)
 
@@ -257,6 +259,7 @@ async function runFullSync(meliUserId) {
       orders,
       questions,
       metrics,
+      consolidation: { merged: consolidation.filter((r) => r.merged).length, groups: consolidation.length },
       stock_reconcile: stockReconcile,
       sales_backfill: salesBackfill,
     }

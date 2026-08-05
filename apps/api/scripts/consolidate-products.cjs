@@ -9,9 +9,9 @@ async function main() {
 
   if (!dryRun) {
     const { rows } = await getPool().query(
-      `SELECT p.id, p.name, p.inventory_sku, p.stock_quantity,
+      `SELECT p.id, p.name, p.sku, p.stock_quantity, p.external_ids,
          (SELECT COUNT(*)::int FROM meli_items mi WHERE mi.product_id = p.id) AS listings
-       FROM products p WHERE active = true ORDER BY p.name`
+       FROM products p WHERE active = true ORDER BY p.sku`
     )
     console.log('\nActive products after consolidate:')
     console.table(rows)

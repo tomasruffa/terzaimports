@@ -13,7 +13,7 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
 
   useEffect(() => {
     if (!loading && !user) {
-      router.push('/login')
+      router.replace('/login?expired=1')
     }
   }, [user, loading, router])
 
@@ -33,7 +33,11 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
   }
 
   if (!user) {
-    return null
+    return (
+      <div className="flex h-screen bg-terza-navy items-center justify-center">
+        <p className="text-terza-gray text-sm">Redirigiendo al login...</p>
+      </div>
+    )
   }
 
   return <>{children}</>
