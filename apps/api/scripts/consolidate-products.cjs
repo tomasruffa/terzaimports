@@ -4,8 +4,8 @@ const { getPool } = require('../src/lib/db')
 
 async function main() {
   const dryRun = process.argv.includes('--dry-run')
-  const results = await consolidateDuplicateProducts({ dryRun })
-  console.log(JSON.stringify(results, null, 2))
+  const { results, cleanup } = await consolidateDuplicateProducts({ dryRun })
+  console.log(JSON.stringify({ results, cleanup }, null, 2))
 
   if (!dryRun) {
     const { rows } = await getPool().query(

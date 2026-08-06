@@ -79,7 +79,10 @@ router.get('/', async (req, res) => {
   const conditions = []
   const params = []
 
-  if (active !== undefined) {
+  // Por defecto solo productos activos en el catálogo
+  if (active === undefined) {
+    conditions.push('active = true')
+  } else {
     params.push(active === 'true')
     conditions.push(`active = $${params.length}`)
   }
@@ -152,9 +155,9 @@ router.get('/:id', async (req, res) => {
 
 router.post('/consolidate', requireAuth, async (_req, res) => {
   try {
-    const results = await consolidateDuplicateProducts()
+    const { results, cleanup } = await consolidateDuplicateProducts()
     const merged = results.filter((r) => r.merged).length
-    res.json({ ok: true, groups_merged: merged, results })
+    res.json({ ok: true, groups_merged: merged, orphans_deactivated: cleanup.deactivated, results })
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message })
   }

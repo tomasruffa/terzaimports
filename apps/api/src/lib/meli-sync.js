@@ -46,34 +46,70 @@ function mapMeliItemToProduct(item) {
 }
 
 async function upsertProductFromMeliItem(item) {
+  const stored = await query(
+    'SELECT seller_sku, product_id FROM meli_items WHERE meli_item_id = $1',
+    [item.id]
+  )
+  const storedSku = stored.rows[0]?.seller_sku
+  if (storedSku && !isGeneratedSku(storedSku)) {
+    item = { ...item, seller_custom_field: storedSku }
+  }
+
   const data = mapMeliItemToProduct(item)
 
-  const linked = await query('SELECT product_id FROM meli_items WHERE meli_item_id = $1', [data.meli_item_id])
-  let productId = linked.rows[0]?.product_id
+  let productId = stored.rows[0]?.product_id
+
+  if (!productId) {
+    const linked = await query('SELECT product_id FROM meli_items WHERE meli_item_id = $1', [data.meli_item_id])
+    productId = linked.rows[0]?.product_id
+  }
 
   if (!productId) {
     const byMeli = await query('SELECT id FROM products WHERE meli_item_id = $1', [data.meli_item_id])
     productId = byMeli.rows[0]?.id
   }
 
-  if (!productId) {
+  if (!productId && !isGeneratedSku(data.sku)) {
     const bySku = await findProductBySku(data.sku, { activeOnly: false })
     productId = bySku?.id
   }
 
   if (productId) {
-    const { rows: existing } = await query('SELECT sku FROM products WHERE id = $1', [productId])
-    const keepSku = existing.rows[0]?.sku && !isGeneratedSku(existing.rows[0].sku)
-    const nextSku = keepSku ? existing.rows[0].sku : data.sku
+    const { rows: existing } = await query(
+      `SELECT sku, sale_price,
+         (SELECT COUNT(*)::int FROM meli_items WHERE product_id = products.id) AS listings
+       FROM products WHERE id = $1`,
+      [productId]
+    )
+    const row = existing.rows[0]
+    const keepSku = row?.sku && !isGeneratedSku(row.sku)
+    const nextSku = keepSku ? row.sku : data.sku
+    const keepPrice = Number(row?.sale_price) > 0
+    const nextPrice = keepPrice ? row.sale_price : data.sale_price
+    const keepName = keepSku && Number(row?.listings) > 1
 
     const { rows } = await query(
       `UPDATE products SET
-         name = $1, image_url = $2, meli_permalink = $3, active = $4,
-         sku = $5, inventory_sku = $5,
-         meli_last_synced_at = NOW(), updated_at = NOW()
+         name = CASE WHEN $7 THEN name ELSE $1 END,
+         image_url = $2,
+         meli_permalink = COALESCE($3, meli_permalink),
+         active = true,
+         sku = $4,
+         inventory_sku = $4,
+         sale_price = $5,
+         meli_last_synced_at = NOW(),
+         updated_at = NOW()
        WHERE id = $6
        RETURNING *`,
-      [data.name, data.image_url, data.meli_permalink, data.active, nextSku, productId]
+      [
+        data.name,
+        data.image_url,
+        data.meli_permalink,
+        nextSku,
+        nextPrice,
+        productId,
+        keepName,
+      ]
     )
     await linkMeliItemToProduct(data.meli_item_id, productId)
     await query(
@@ -81,6 +117,10 @@ async function upsertProductFromMeliItem(item) {
       [normalizeSku(nextSku), data.meli_item_id]
     )
     return { product: rows[0], created: false }
+  }
+
+  if (isGeneratedSku(data.sku)) {
+    return { product: null, created: false, skipped: true, reason: 'no_sku_on_listing' }
   }
 
   const { rows } = await query(

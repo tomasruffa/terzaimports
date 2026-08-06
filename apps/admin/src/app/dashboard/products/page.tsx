@@ -33,7 +33,7 @@ export default function ProductsPage() {
 
   const fetchProducts = useCallback(async () => {
     try {
-      const res = await apiFetch(`/api/products?search=${search}`)
+      const res = await apiFetch(`/api/products?active=true&search=${encodeURIComponent(search)}`)
       const json = await res.json()
       if (json.data) setProducts(json.data)
     } catch {
@@ -133,7 +133,7 @@ export default function ProductsPage() {
                         <p className="text-terza-gray text-xs">{p.supplier} · {p.origin_country}</p>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-terza-gray text-xs font-mono">{p.inventory_sku || p.sku}</td>
+                    <td className="px-4 py-3 text-terza-gray text-xs font-mono">{p.sku}</td>
                     <td className="px-4 py-3">
                       {(p.meli_listings_count ?? 0) > 0 ? (
                         <span className="bg-yellow-500/15 text-yellow-400 text-xs px-2 py-0.5 rounded-full">

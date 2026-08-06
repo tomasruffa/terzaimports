@@ -106,6 +106,34 @@ async function mergeDuplicateProducts(canonicalId, duplicateIds, { stock, sku } 
   }
 }
 
+async function cleanupOrphanProducts() {
+  const { rowCount } = await query(
+    `UPDATE products SET active = false, updated_at = NOW()
+     WHERE active = true
+       AND NOT EXISTS (SELECT 1 FROM meli_items mi WHERE mi.product_id = products.id)
+       AND (
+         sku LIKE 'MLA%' OR sku LIKE 'INV-%' OR sku LIKE 'MELI-%'
+         OR inventory_sku LIKE 'INV-%'
+       )`
+  )
+  return { deactivated: rowCount }
+}
+
+async function pickCanonicalName(group, sku = '') {
+  const ids = group.map((g) => g.meli_item_id)
+  const preferWayfarer = sku.includes('WAYGEN2')
+  const { rows } = await query(
+    `SELECT title FROM meli_items
+     WHERE meli_item_id = ANY($1::text[])
+     ORDER BY (status = 'active') DESC,
+       CASE WHEN $2::boolean AND title ILIKE '%wayfarer%' THEN 0 ELSE 1 END,
+       LENGTH(title) ASC
+     LIMIT 1`,
+    [ids, preferWayfarer]
+  )
+  return rows[0]?.title ?? null
+}
+
 async function consolidateProductsBySku({ dryRun = false } = {}) {
   const { rows: items } = await query(
     `SELECT mi.meli_item_id, mi.seller_sku, mi.product_id, mi.available_quantity, mi.status,
@@ -117,7 +145,7 @@ async function consolidateProductsBySku({ dryRun = false } = {}) {
   const groups = new Map()
   for (const row of items) {
     const sku = normalizeSku(row.seller_sku) || normalizeSku(row.sku)
-    if (!sku) continue
+    if (!sku || isGeneratedSku(sku)) continue
     if (!groups.has(sku)) groups.set(sku, [])
     groups.get(sku).push(row)
   }
@@ -169,9 +197,13 @@ async function consolidateProductsBySku({ dryRun = false } = {}) {
         if (needsMerge) {
           await mergeDuplicateProducts(canonicalId, duplicateIds, { stock, sku })
         } else {
+          const canonicalName = await pickCanonicalName(group, sku)
           await query(
-            'UPDATE products SET sku = $1, inventory_sku = $1, stock_quantity = $2, active = true, updated_at = NOW() WHERE id = $3',
-            [sku, stock, canonicalId]
+            `UPDATE products SET
+               sku = $1, inventory_sku = $1, stock_quantity = $2, active = true,
+               name = COALESCE($4, name), updated_at = NOW()
+             WHERE id = $3`,
+            [sku, stock, canonicalId, canonicalName]
           )
         }
         action.merged = true
@@ -188,7 +220,9 @@ async function consolidateProductsBySku({ dryRun = false } = {}) {
 
 /** Consolidación de productos — siempre por SKU (alias para compatibilidad). */
 async function consolidateDuplicateProducts(options = {}) {
-  return consolidateProductsBySku(options)
+  const results = await consolidateProductsBySku(options)
+  const cleanup = options.dryRun ? { deactivated: 0 } : await cleanupOrphanProducts()
+  return { results, cleanup }
 }
 
 module.exports = {
@@ -199,6 +233,7 @@ module.exports = {
   addMeliIdToProduct,
   getMeliListingsForProduct,
   linkMeliItemToProduct,
+  cleanupOrphanProducts,
   consolidateProductsBySku,
   consolidateDuplicateProducts,
 }

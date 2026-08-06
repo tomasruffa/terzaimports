@@ -12,7 +12,7 @@ const {
 } = require('./meli-repository')
 const { syncItemFromMeli, reconcileStockFromMeliItems } = require('./meli-sync')
 const { backfillMeliSales } = require('./sales')
-const { consolidateProductsBySku } = require('./product-consolidation')
+const { consolidateDuplicateProducts } = require('./product-consolidation')
 
 const ITEM_STATUSES = ['active', 'paused', 'closed']
 const ORDERS_LOOKBACK_DAYS = 90
@@ -103,8 +103,12 @@ async function syncItems(meliUserId) {
       const item = await meliFetch(`/items/${itemId}`, {}, meliUserId)
       const visits = visitsMap.get(itemId) || { total: 0, last30d: 0 }
       await upsertItem(item, meliUserId, visits)
-      await syncItemFromMeli(itemId, meliUserId)
-      synced += 1
+      const productResult = await syncItemFromMeli(itemId, meliUserId)
+      if (productResult?.skipped) {
+        errors.push({ itemId, skipped: true, reason: productResult.reason })
+      } else {
+        synced += 1
+      }
     } catch (err) {
       errors.push({ itemId, error: err.message })
     }
@@ -249,7 +253,7 @@ async function runFullSync(meliUserId) {
     ])
 
     const metrics = await syncMetricsSnapshot(userId)
-    const consolidation = await consolidateProductsBySku()
+    const { results: consolidation, cleanup } = await consolidateDuplicateProducts()
     const stockReconcile = await reconcileStockFromMeliItems()
     const salesBackfill = await backfillMeliSales(userId)
 
@@ -259,7 +263,11 @@ async function runFullSync(meliUserId) {
       orders,
       questions,
       metrics,
-      consolidation: { merged: consolidation.filter((r) => r.merged).length, groups: consolidation.length },
+      consolidation: {
+        merged: consolidation.filter((r) => r.merged).length,
+        groups: consolidation.length,
+        orphans_deactivated: cleanup.deactivated,
+      },
       stock_reconcile: stockReconcile,
       sales_backfill: salesBackfill,
     }
