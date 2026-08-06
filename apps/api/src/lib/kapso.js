@@ -198,8 +198,36 @@ async function sendWithDeliveryCheck(sendFn) {
   return { ...result, delivered: true, delivery_status: delivery.status }
 }
 
-async function notifyAdmin(body, { templateFallback } = {}) {
+async function notifyAdminTemplate({ name, language = 'es_AR', bodyParams = [] }, to) {
   if (!isConfigured()) return { skipped: true }
+  if (!name) return { error: 'template_name_required' }
+
+  try {
+    const result = await sendWithDeliveryCheck(() =>
+      sendTemplate({ name, language, bodyParams }, to)
+    )
+    if (result?.delivered) return result
+    if (result?.delivery_failed) {
+      return {
+        error: result.delivery_errors?.[0]?.message || 'template_not_delivered',
+        ...result,
+      }
+    }
+    return result
+  } catch (err) {
+    console.error('[kapso] notifyAdminTemplate failed:', name, err.message)
+    return { error: err.message, template: name }
+  }
+}
+
+async function notifyAdmin(body, { template, templateFallback } = {}) {
+  if (!isConfigured()) return { skipped: true }
+
+  if (template?.name) {
+    const templateResult = await notifyAdminTemplate(template)
+    if (!templateResult?.error && !templateResult?.skipped) return templateResult
+    console.warn('[kapso] primary template failed, trying text fallback', template.name)
+  }
 
   try {
     const result = await sendWithDeliveryCheck(() => sendText(body))
@@ -225,12 +253,12 @@ async function notifyAdmin(body, { templateFallback } = {}) {
 
     return result
   } catch (err) {
-    if (err.status === 422 && process.env.KAPSO_SALE_TEMPLATE) {
+    if (err.status === 422 && (templateFallback?.name || process.env.KAPSO_SALE_TEMPLATE)) {
       try {
         return await sendWithDeliveryCheck(() =>
           sendTemplate({
-            name: process.env.KAPSO_SALE_TEMPLATE,
-            language: process.env.KAPSO_SALE_TEMPLATE_LANG || 'es_AR',
+            name: templateFallback?.name || process.env.KAPSO_SALE_TEMPLATE,
+            language: templateFallback?.language || process.env.KAPSO_SALE_TEMPLATE_LANG || 'es_AR',
             bodyParams: templateFallback?.bodyParams || [],
           })
         )
@@ -251,5 +279,6 @@ module.exports = {
   sendTemplate,
   sendDocument,
   notifyAdmin,
+  notifyAdminTemplate,
   waitForMessageDelivery,
 }

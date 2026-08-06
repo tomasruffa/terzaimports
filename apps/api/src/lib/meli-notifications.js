@@ -1,6 +1,14 @@
 const { query } = require('./db')
 const { meliFetch } = require('./meli')
-const { notifyAdmin } = require('./kapso')
+const { notifyAdmin, notifyAdminTemplate } = require('./kapso')
+const {
+  LANG,
+  TEMPLATE_NAMES,
+  questionTemplateParams,
+  orderTemplateParams,
+  paymentTemplateParams,
+  systemOkTemplateParams,
+} = require('./kapso-templates')
 const { syncItemFromMeli, maybeNotifyLowStock } = require('./meli-sync')
 const { syncOrderById, syncQuestionById } = require('./meli-data-sync')
 const { upsertPayment } = require('./meli-repository')
@@ -35,7 +43,14 @@ async function handleOrdersV2(resource, meliUserId) {
       `Orden: #${orderId}\n` +
       `Comprador: ${buyer}\n` +
       `Estado: ${status}\n` +
-      `Total: $${total ?? '—'}`
+      `Total: $${total ?? '—'}`,
+    {
+      template: {
+        name: TEMPLATE_NAMES.ML_ORDEN,
+        language: LANG,
+        bodyParams: orderTemplateParams(order),
+      },
+    }
   )
 }
 
@@ -48,7 +63,14 @@ async function handleQuestion(resource, meliUserId) {
   await notifyAdmin(
     `❓ Nueva pregunta en Mercado Libre\n` +
       `Publicación: ${question.item_id}\n` +
-      `Pregunta: ${question.text}`
+      `Pregunta: ${question.text}`,
+    {
+      template: {
+        name: TEMPLATE_NAMES.ML_PREGUNTA,
+        language: LANG,
+        bodyParams: questionTemplateParams(question),
+      },
+    }
   )
 }
 
@@ -71,7 +93,14 @@ async function handlePayment(resource, meliUserId) {
     `💳 Pago en Mercado Libre\n` +
       `ID: ${paymentId}\n` +
       `Estado: ${payment.status}\n` +
-      `Monto: $${payment.transaction_amount ?? '—'}`
+      `Monto: $${payment.transaction_amount ?? '—'}`,
+    {
+      template: {
+        name: TEMPLATE_NAMES.ML_PAGO,
+        language: LANG,
+        bodyParams: paymentTemplateParams(payment),
+      },
+    }
   )
 }
 
@@ -108,12 +137,14 @@ async function processMeliNotification(payload) {
       await handlePayment(resource, meliUserId)
       break
     case 'test_ping':
-      await notifyAdmin(
-        `✅ Webhook de Mercado Libre OK\n` +
-          `Notificación de prueba recibida correctamente.\n` +
-          `Topic: ${topic}\n` +
-          `Hora: ${new Date().toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' })}`
-      )
+      const testMsg = `Webhook ML OK — ${new Date().toLocaleString('es-AR', {
+        timeZone: 'America/Argentina/Buenos_Aires',
+      })}`
+      await notifyAdminTemplate({
+        name: TEMPLATE_NAMES.SISTEMA_OK,
+        language: LANG,
+        bodyParams: systemOkTemplateParams(testMsg),
+      })
       break
     default:
       console.log('[meli] topic sin handler', topic, resource)

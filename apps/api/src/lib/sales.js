@@ -1,8 +1,13 @@
 const { getPool } = require('./db')
-const { notifyAdmin, sendDocument } = require('./kapso')
+const { notifyAdmin, sendDocument, notifyAdminTemplate } = require('./kapso')
 const { getTokenRow } = require('./meli')
 const { maybeNotifyLowStock, syncStockToMeli } = require('./meli-sync')
 const { syncMeliOrderDocuments, getSaleDocumentsInfo } = require('./meli-documents')
+const {
+  LANG,
+  TEMPLATE_NAMES,
+  saleTemplateParams,
+} = require('./kapso-templates')
 
 const SALES_CHANNELS = ['mercadolibre', 'whatsapp', 'facebook', 'presencial']
 
@@ -87,13 +92,14 @@ async function notifySaleIfNeeded(saleId, { force = false } = {}) {
   }
 
   const result = await notifyAdmin(formatSaleNotificationMessage(sale, sale.items), {
+    template: {
+      name: TEMPLATE_NAMES.VENTA,
+      language: LANG,
+      bodyParams: saleTemplateParams(sale, CHANNEL_LABELS[sale.channel] || sale.channel),
+    },
     templateFallback: {
-      name: process.env.KAPSO_SALE_TEMPLATE || 'terza_nueva_venta',
-      bodyParams: [
-        CHANNEL_LABELS[sale.channel] || sale.channel,
-        sale.customer_name || sale.customer_contact || '—',
-        formatMoney(sale.total_amount, sale.currency_id),
-      ],
+      name: TEMPLATE_NAMES.VENTA,
+      bodyParams: saleTemplateParams(sale, CHANNEL_LABELS[sale.channel] || sale.channel),
     },
   })
   if (result?.error || result?.skipped) return result

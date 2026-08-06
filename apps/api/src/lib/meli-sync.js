@@ -1,6 +1,11 @@
 const { query } = require('./db')
 const { meliFetch } = require('./meli')
-const { notifyAdmin } = require('./kapso')
+const { notifyAdmin, notifyAdminTemplate } = require('./kapso')
+const {
+  LANG,
+  TEMPLATE_NAMES,
+  stockTemplateParams,
+} = require('./kapso-templates')
 const {
   normalizeSku,
   findProductBySku,
@@ -369,11 +374,11 @@ async function maybeNotifyLowStock(productOrId) {
     }
   }
 
-  await notifyAdmin(
-    `⚠️ Stock bajo en Terza Imports\n` +
-      `Producto: ${product.name}\n` +
-      `Stock: ${product.stock_quantity} (mín: ${product.min_stock})`
-  )
+  await notifyAdminTemplate({
+    name: TEMPLATE_NAMES.STOCK_BAJO,
+    language: LANG,
+    bodyParams: stockTemplateParams(product),
+  })
   await query('UPDATE products SET low_stock_notified_at = NOW() WHERE id = $1', [productId])
   return { sent: true }
 }
