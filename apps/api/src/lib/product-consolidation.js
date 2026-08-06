@@ -50,11 +50,87 @@ async function addMeliIdToProduct(productId, meliItemId) {
 
 async function getMeliListingsForProduct(productId) {
   const { rows } = await query(
-    `SELECT meli_item_id, title, price, status, listing_type_id, available_quantity, permalink, thumbnail, seller_sku
+    `SELECT meli_item_id, title, price, status, listing_type_id, available_quantity, permalink, thumbnail, seller_sku, raw
      FROM meli_items WHERE product_id = $1 ORDER BY price ASC`,
     [productId]
   )
   return rows.map((row) => ({ ...row, listing_label: listingLabel(row) }))
+}
+
+function buildPublicationGroupsFromItems(items) {
+  const groups = new Map()
+
+  for (const row of items) {
+    const up = row.raw?.user_product_id
+    const key = up || row.meli_item_id
+    const family = row.raw?.family_name || row.title
+
+    if (!groups.has(key)) {
+      groups.set(key, {
+        user_product_id: up || null,
+        family_name: family,
+        title: row.title,
+        listings: [],
+      })
+    }
+
+    const group = groups.get(key)
+    if (family && family.length > (group.family_name?.length || 0)) {
+      group.family_name = family
+    }
+
+    group.listings.push({
+      meli_item_id: row.meli_item_id,
+      title: row.title,
+      price: Number(row.price) || 0,
+      status: row.status,
+      listing_label: listingLabel(row),
+      listing_type_id: row.listing_type_id,
+      available_quantity: row.available_quantity,
+      permalink: row.permalink,
+      thumbnail: row.thumbnail,
+    })
+  }
+
+  return Array.from(groups.values()).map((g) => ({
+    ...g,
+    listings_count: g.listings.length,
+    is_variant_group: g.listings.length > 1,
+  }))
+}
+
+async function getMeliPublicationGroupsForProduct(productId) {
+  const { rows } = await query(
+    `SELECT meli_item_id, title, price, status, listing_type_id, available_quantity,
+            permalink, thumbnail, seller_sku, raw
+     FROM meli_items WHERE product_id = $1 ORDER BY price ASC`,
+    [productId]
+  )
+  return buildPublicationGroupsFromItems(rows)
+}
+
+async function getMeliPublicationGroupsForProducts(productIds) {
+  if (!productIds.length) return new Map()
+
+  const { rows } = await query(
+    `SELECT product_id, meli_item_id, title, price, status, listing_type_id,
+            available_quantity, permalink, thumbnail, seller_sku, raw
+     FROM meli_items WHERE product_id = ANY($1::uuid[])
+     ORDER BY product_id, price ASC`,
+    [productIds]
+  )
+
+  const itemsByProduct = new Map()
+  for (const row of rows) {
+    if (!itemsByProduct.has(row.product_id)) itemsByProduct.set(row.product_id, [])
+    itemsByProduct.get(row.product_id).push(row)
+  }
+
+  const result = new Map()
+  for (const [productId, items] of itemsByProduct) {
+    result.set(productId, buildPublicationGroupsFromItems(items))
+  }
+  return result
 }
 
 async function linkMeliItemToProduct(meliItemId, productId) {
@@ -281,6 +357,8 @@ module.exports = {
   findProductBySku,
   addMeliIdToProduct,
   getMeliListingsForProduct,
+  getMeliPublicationGroupsForProduct,
+  getMeliPublicationGroupsForProducts,
   linkMeliItemToProduct,
   cleanupOrphanProducts,
   inheritSkuFromUserProducts,

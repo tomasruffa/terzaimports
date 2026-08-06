@@ -1,7 +1,13 @@
 'use client'
-import { useEffect, useState, useCallback } from 'react'
-import { Plus, Search, Edit, Power, Package, AlertCircle } from 'lucide-react'
+
+import { Fragment, useEffect, useState, useCallback } from 'react'
+import { Plus, Search, Edit, Package, AlertCircle } from 'lucide-react'
 import ProductModal from '@/components/dashboard/ProductModal'
+import {
+  MeliPublicationGroup,
+  MeliPublicationsExpandable,
+  MeliPublicationsDetail,
+} from '@/components/dashboard/MeliPublications'
 
 interface Product {
   id: string
@@ -20,6 +26,8 @@ interface Product {
   images: string[]
   active: boolean
   meli_listings_count?: number
+  meli_publications_count?: number
+  meli_publication_groups?: MeliPublicationGroup[]
 }
 
 import { apiFetch } from '@/utils/apiFetch'
@@ -30,6 +38,7 @@ export default function ProductsPage() {
   const [search, setSearch] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
   const [editProduct, setEditProduct] = useState<Product | null>(null)
+  const [expandedId, setExpandedId] = useState<string | null>(null)
 
   const fetchProducts = useCallback(async () => {
     try {
@@ -69,9 +78,12 @@ export default function ProductsPage() {
     return { label: 'OK', color: 'text-green-400 bg-green-500/10' }
   }
 
+  const toggleExpand = (id: string) => {
+    setExpandedId((prev) => (prev === id ? null : id))
+  }
+
   return (
     <div className="space-y-6">
-      {/* Header + actions */}
       <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
         <div className="relative flex-1 max-w-md">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-terza-gray" />
@@ -98,7 +110,6 @@ export default function ProductsPage() {
         </div>
       </div>
 
-      {/* Table */}
       <div className="card-dark overflow-hidden p-0">
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -125,50 +136,65 @@ export default function ProductsPage() {
               ) : products.map(p => {
                 const status = stockStatus(p)
                 const margin = p.purchase_price > 0 ? ((p.sale_price - p.purchase_price) / p.purchase_price * 100).toFixed(0) : '—'
+                const groups = p.meli_publication_groups ?? []
+                const canExpand = groups.some((g) => g.is_variant_group) || groups.length > 1
+                const isExpanded = expandedId === p.id
+
                 return (
-                  <tr key={p.id} className="border-b border-terza-gray-dark/20 hover:bg-terza-navy-medium/50 transition-colors">
-                    <td className="px-4 py-3">
-                      <div>
-                        <p className="text-white text-sm font-medium">{p.name}</p>
-                        <p className="text-terza-gray text-xs">{p.supplier} · {p.origin_country}</p>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-terza-gray text-xs font-mono">{p.sku}</td>
-                    <td className="px-4 py-3">
-                      {(p.meli_listings_count ?? 0) > 0 ? (
-                        <span className="bg-yellow-500/15 text-yellow-400 text-xs px-2 py-0.5 rounded-full">
-                          {p.meli_listings_count} en ML
-                        </span>
-                      ) : (
-                        <span className="text-terza-gray text-xs">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-white text-sm">${p.purchase_price.toFixed(2)}</td>
-                    <td className="px-4 py-3">
-                      <div>
-                        <span className="text-white text-sm">${p.sale_price.toFixed(2)}</span>
-                        <span className="text-green-400 text-xs ml-1">+{margin}%</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1.5">
-                        {p.stock_quantity <= p.min_stock && p.stock_quantity > 0 && (
-                          <AlertCircle size={12} className="text-yellow-400" />
+                  <Fragment key={p.id}>
+                      <td className="px-4 py-3">
+                        <div>
+                          <p className="text-white text-sm font-medium">{p.name}</p>
+                          <p className="text-terza-gray text-xs">{p.supplier} · {p.origin_country}</p>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-terza-gray text-xs font-mono">{p.sku}</td>
+                      <td className="px-4 py-3">
+                        {groups.length > 0 ? (
+                          <MeliPublicationsExpandable
+                            groups={groups}
+                            listingsCount={p.meli_listings_count}
+                            expanded={isExpanded}
+                            onToggle={() => canExpand && toggleExpand(p.id)}
+                          />
+                        ) : (
+                          <span className="text-terza-gray text-xs">—</span>
                         )}
-                        <span className="text-white text-sm">{p.stock_quantity}</span>
-                        <span className="text-terza-gray text-xs">{p.unit}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${status.color}`}>{status.label}</span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <button onClick={() => handleEdit(p)}
-                        className="text-terza-gray hover:text-terza-blue-bright transition-colors p-1">
-                        <Edit size={15} />
-                      </button>
-                    </td>
-                  </tr>
+                      </td>
+                      <td className="px-4 py-3 text-white text-sm">${p.purchase_price.toFixed(2)}</td>
+                      <td className="px-4 py-3">
+                        <div>
+                          <span className="text-white text-sm">${p.sale_price.toFixed(2)}</span>
+                          <span className="text-green-400 text-xs ml-1">+{margin}%</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1.5">
+                          {p.stock_quantity <= p.min_stock && p.stock_quantity > 0 && (
+                            <AlertCircle size={12} className="text-yellow-400" />
+                          )}
+                          <span className="text-white text-sm">{p.stock_quantity}</span>
+                          <span className="text-terza-gray text-xs">{p.unit}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${status.color}`}>{status.label}</span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <button onClick={() => handleEdit(p)}
+                          className="text-terza-gray hover:text-terza-blue-bright transition-colors p-1">
+                          <Edit size={15} />
+                        </button>
+                      </td>
+                    </tr>
+                    {isExpanded && canExpand && (
+                      <tr className="border-b border-terza-gray-dark/20 bg-terza-navy-medium/20">
+                        <td colSpan={8} className="px-4 pb-4 pt-1">
+                          <MeliPublicationsDetail groups={groups} />
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 )
               })}
             </tbody>

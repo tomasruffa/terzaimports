@@ -3,7 +3,7 @@ const multer = require('multer')
 const { query } = require('../lib/db')
 const { uploadProductImage, getPublicUrl } = require('../lib/storage')
 const { syncStockToMeli } = require('../lib/meli-sync')
-const { getMeliListingsForProduct, consolidateDuplicateProducts } = require('../lib/product-consolidation')
+const { getMeliListingsForProduct, getMeliPublicationGroupsForProduct, getMeliPublicationGroupsForProducts, consolidateDuplicateProducts } = require('../lib/product-consolidation')
 const requireAuth = require('../middleware/auth')
 
 const upload = multer({
@@ -101,7 +101,9 @@ router.get('/', async (req, res) => {
     const countResult = await query(`SELECT COUNT(*)::int AS total FROM products ${where}`, params)
     const { rows } = await query(
       `SELECT p.*,
-         (SELECT COUNT(*)::int FROM meli_items mi WHERE mi.product_id = p.id) AS meli_listings_count
+         (SELECT COUNT(*)::int FROM meli_items mi WHERE mi.product_id = p.id) AS meli_listings_count,
+         (SELECT COUNT(DISTINCT COALESCE(mi.raw->>'user_product_id', mi.meli_item_id))::int
+          FROM meli_items mi WHERE mi.product_id = p.id) AS meli_publications_count
        FROM products p
        ${where}
        ORDER BY p.created_at DESC
@@ -109,8 +111,14 @@ router.get('/', async (req, res) => {
       [...params, limitNum, offset]
     )
 
+    const productIds = rows.map((r) => r.id)
+    const groupsMap = await getMeliPublicationGroupsForProducts(productIds)
+
     res.json({
-      data: rows.map(normalizeProduct),
+      data: rows.map((row) => ({
+        ...normalizeProduct(row),
+        meli_publication_groups: groupsMap.get(row.id) || [],
+      })),
       error: null,
       total: countResult.rows[0].total,
       page: pageNum,
@@ -146,8 +154,18 @@ router.get('/:id', async (req, res) => {
     if (!rows[0]) {
       return res.status(404).json({ data: null, error: 'Producto no encontrado' })
     }
-    const meli_listings = await getMeliListingsForProduct(req.params.id)
-    res.json({ data: { ...normalizeProduct(rows[0]), meli_listings }, error: null })
+    const meli_publication_groups = await getMeliPublicationGroupsForProduct(req.params.id)
+    const meli_listings = meli_publication_groups.flatMap((g) => g.listings)
+    res.json({
+      data: {
+        ...normalizeProduct(rows[0]),
+        meli_listings_count: meli_listings.length,
+        meli_publications_count: meli_publication_groups.length,
+        meli_publication_groups,
+        meli_listings,
+      },
+      error: null,
+    })
   } catch (err) {
     res.status(500).json({ data: null, error: err.message })
   }
