@@ -142,6 +142,7 @@ export default function ProductsPage() {
 
                 return (
                   <Fragment key={p.id}>
+                    <tr className="border-b border-terza-gray-dark/20 hover:bg-terza-navy-medium/50 transition-colors">
                       <td className="px-4 py-3">
                         <div>
                           <p className="text-white text-sm font-medium">{p.name}</p>
