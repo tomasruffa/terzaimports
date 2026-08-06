@@ -155,9 +155,15 @@ router.get('/:id', async (req, res) => {
 
 router.post('/consolidate', requireAuth, async (_req, res) => {
   try {
-    const { results, cleanup } = await consolidateDuplicateProducts()
+    const { results, cleanup, sku_inheritance } = await consolidateDuplicateProducts()
     const merged = results.filter((r) => r.merged).length
-    res.json({ ok: true, groups_merged: merged, orphans_deactivated: cleanup.deactivated, results })
+    res.json({
+      ok: true,
+      groups_merged: merged,
+      orphans_deactivated: cleanup.deactivated,
+      sku_inherited: sku_inheritance.updated,
+      results,
+    })
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message })
   }

@@ -1,6 +1,7 @@
 const { query } = require('./db')
 const { upsertSaleFromMeliOrder } = require('./sales')
 const { normalizeSku } = require('./product-consolidation')
+const { extractSellerSkuFromMeliItem } = require('./meli-sync')
 
 function toJson(value) {
   return value ? JSON.stringify(value) : null
@@ -53,7 +54,7 @@ async function upsertAccount(user) {
 }
 
 async function upsertItem(item, meliUserId, visits = {}) {
-  const sellerSku = normalizeSku(item.seller_custom_field) || null
+  const sellerSku = extractSellerSkuFromMeliItem(item)
 
   const { rows } = await query(
     `INSERT INTO meli_items (

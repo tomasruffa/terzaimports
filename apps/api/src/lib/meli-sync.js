@@ -18,9 +18,19 @@ function slugifySku(value, fallback) {
   return base || `MELI-${fallback}`
 }
 
+function extractSellerSkuFromMeliItem(item) {
+  const raw =
+    item.seller_custom_field ||
+    item.attributes?.find((a) => a.id === 'SELLER_SKU')?.value_name ||
+    item.seller_sku
+  if (!raw) return null
+  return normalizeSku(raw)
+}
+
 function meliSkuFromItem(item) {
-  const raw = item.seller_custom_field || item.attributes?.find((a) => a.id === 'SELLER_SKU')?.value_name
-  return slugifySku(raw, item.id)
+  const extracted = extractSellerSkuFromMeliItem(item)
+  if (extracted) return extracted
+  return slugifySku(null, item.id)
 }
 
 function mapMeliItemToProduct(item) {
@@ -344,4 +354,5 @@ module.exports = {
   reconcileStockFromMeliItems,
   maybeNotifyLowStock,
   meliSkuFromItem,
+  extractSellerSkuFromMeliItem,
 }

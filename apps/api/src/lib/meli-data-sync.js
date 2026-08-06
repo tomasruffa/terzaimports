@@ -253,7 +253,8 @@ async function runFullSync(meliUserId) {
     ])
 
     const metrics = await syncMetricsSnapshot(userId)
-    const { results: consolidation, cleanup } = await consolidateDuplicateProducts()
+    const { results: consolidation, cleanup, sku_inheritance: skuInheritance } =
+      await consolidateDuplicateProducts()
     const stockReconcile = await reconcileStockFromMeliItems()
     const salesBackfill = await backfillMeliSales(userId)
 
@@ -267,6 +268,7 @@ async function runFullSync(meliUserId) {
         merged: consolidation.filter((r) => r.merged).length,
         groups: consolidation.length,
         orphans_deactivated: cleanup.deactivated,
+        sku_inherited: skuInheritance.updated,
       },
       stock_reconcile: stockReconcile,
       sales_backfill: salesBackfill,

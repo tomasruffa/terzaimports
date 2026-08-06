@@ -119,6 +119,52 @@ async function cleanupOrphanProducts() {
   return { deactivated: rowCount }
 }
 
+/** Propaga el SKU del User Product a todas las sub-publicaciones del grupo. */
+async function inheritSkuFromUserProducts() {
+  const { rows } = await query(
+    `SELECT meli_item_id, seller_sku, raw FROM meli_items
+     WHERE raw->>'user_product_id' IS NOT NULL`
+  )
+
+  const groups = new Map()
+  for (const row of rows) {
+    const up = row.raw?.user_product_id
+    if (!up) continue
+    if (!groups.has(up)) groups.set(up, [])
+    groups.get(up).push(row)
+  }
+
+  let updated = 0
+  for (const [, items] of groups) {
+    let sku = null
+    for (const item of items) {
+      if (item.seller_sku && !isGeneratedSku(item.seller_sku)) {
+        sku = normalizeSku(item.seller_sku)
+        break
+      }
+      const attr = item.raw?.attributes?.find((a) => a.id === 'SELLER_SKU')
+      if (attr?.value_name) {
+        sku = normalizeSku(attr.value_name)
+        break
+      }
+      if (item.raw?.seller_custom_field) {
+        sku = normalizeSku(item.raw.seller_custom_field)
+        break
+      }
+    }
+    if (!sku || isGeneratedSku(sku)) continue
+
+    for (const item of items) {
+      if (normalizeSku(item.seller_sku) !== sku) {
+        await query('UPDATE meli_items SET seller_sku = $1 WHERE meli_item_id = $2', [sku, item.meli_item_id])
+        updated += 1
+      }
+    }
+  }
+
+  return { updated }
+}
+
 async function pickCanonicalName(group, sku = '') {
   const ids = group.map((g) => g.meli_item_id)
   const preferWayfarer = sku.includes('WAYGEN2')
@@ -220,9 +266,12 @@ async function consolidateProductsBySku({ dryRun = false } = {}) {
 
 /** Consolidación de productos — siempre por SKU (alias para compatibilidad). */
 async function consolidateDuplicateProducts(options = {}) {
+  const skuInheritance = options.dryRun
+    ? { updated: 0 }
+    : await inheritSkuFromUserProducts()
   const results = await consolidateProductsBySku(options)
   const cleanup = options.dryRun ? { deactivated: 0 } : await cleanupOrphanProducts()
-  return { results, cleanup }
+  return { results, cleanup, sku_inheritance: skuInheritance }
 }
 
 module.exports = {
@@ -234,6 +283,7 @@ module.exports = {
   getMeliListingsForProduct,
   linkMeliItemToProduct,
   cleanupOrphanProducts,
+  inheritSkuFromUserProducts,
   consolidateProductsBySku,
   consolidateDuplicateProducts,
 }
