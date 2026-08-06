@@ -91,12 +91,22 @@ async function upsertProductFromMeliItem(item) {
        FROM products WHERE id = $1`,
       [productId]
     )
-    const row = existing.rows[0]
+    const row = existing[0]
     const keepSku = row?.sku && !isGeneratedSku(row.sku)
     const nextSku = keepSku ? row.sku : data.sku
     const keepPrice = Number(row?.sale_price) > 0
     const nextPrice = keepPrice ? row.sale_price : data.sale_price
     const keepName = keepSku && Number(row?.listings) > 1
+
+    // Avoid unique constraint if another product already owns this SKU.
+    let skuUpdate = nextSku
+    if (!keepSku && nextSku) {
+      const { rows: skuOwner } = await query(
+        'SELECT id FROM products WHERE UPPER(TRIM(sku)) = $1 AND id <> $2 LIMIT 1',
+        [normalizeSku(nextSku), productId]
+      )
+      if (skuOwner.length) skuUpdate = row.sku
+    }
 
     const { rows } = await query(
       `UPDATE products SET
@@ -115,7 +125,7 @@ async function upsertProductFromMeliItem(item) {
         data.name,
         data.image_url,
         data.meli_permalink,
-        nextSku,
+        skuUpdate,
         nextPrice,
         productId,
         keepName,

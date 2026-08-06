@@ -8,9 +8,19 @@ function normalizeSku(value) {
 }
 
 function listingLabel(item) {
-  const type = item.listing_type_id || ''
-  if (type.includes('gold_pro')) return '3-6 cuotas'
-  if (type.includes('gold_special')) return '1 cuota'
+  const raw = item.raw || item
+  const type = item.listing_type_id || raw.listing_type_id || ''
+  const tags = raw.tags || []
+  const campaign =
+    raw.sale_terms?.find((t) => t.id === 'INSTALLMENTS_CAMPAIGN')?.value_name ||
+    tags.find((t) => /^\d+x_campaign$/.test(t) || t === 'pcj-co-funded')
+
+  if (campaign === '3x_campaign' || tags.includes('3x_campaign')) return '3 cuotas'
+  if (campaign === '6x_campaign' || tags.includes('6x_campaign')) return '6 cuotas'
+  if (campaign === '12x_campaign' || tags.includes('12x_campaign')) return '12 cuotas'
+  if (campaign === 'pcj-co-funded') return '3 a 12 cuotas'
+  if (type.includes('gold_special')) return 'Sin cuotas'
+  if (type.includes('gold_pro')) return '6 cuotas'
   if (type.includes('free')) return 'Gratis'
   return type || 'ML'
 }
@@ -61,13 +71,16 @@ function buildPublicationGroupsFromItems(items) {
   const groups = new Map()
 
   for (const row of items) {
-    const up = row.raw?.user_product_id
-    const key = up || row.meli_item_id
-    const family = row.raw?.family_name || row.title
+    const raw = row.raw || {}
+    const up = raw.user_product_id
+    const familyId = raw.family_id
+    const key = up || (familyId ? `family:${familyId}` : row.meli_item_id)
+    const family = raw.family_name || row.title
 
     if (!groups.has(key)) {
       groups.set(key, {
         user_product_id: up || null,
+        family_id: familyId || null,
         family_name: family,
         title: row.title,
         listings: [],
@@ -94,6 +107,7 @@ function buildPublicationGroupsFromItems(items) {
 
   return Array.from(groups.values()).map((g) => ({
     ...g,
+    meli_item_ids: g.listings.map((l) => l.meli_item_id),
     listings_count: g.listings.length,
     is_variant_group: g.listings.length > 1,
   }))

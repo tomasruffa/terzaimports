@@ -14,7 +14,7 @@ const { syncItemFromMeli, reconcileStockFromMeliItems } = require('./meli-sync')
 const { backfillMeliSales } = require('./sales')
 const { consolidateDuplicateProducts } = require('./product-consolidation')
 
-const ITEM_STATUSES = ['active', 'paused', 'closed']
+const ITEM_STATUSES = ['active', 'paused', 'under_review', 'closed']
 const ORDERS_LOOKBACK_DAYS = 90
 
 function formatDate(date) {
