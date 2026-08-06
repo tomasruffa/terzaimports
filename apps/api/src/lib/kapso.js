@@ -85,6 +85,46 @@ async function sendTemplate({ name, language = 'es_AR', bodyParams = [] }) {
   return json
 }
 
+async function sendDocument({ url, filename, caption }, to) {
+  const apiKey = process.env.KAPSO_API_KEY
+  const phoneNumberId = process.env.KAPSO_PHONE_NUMBER_ID
+  const recipient = normalizePhoneNumber(to || process.env.ADMIN_WHATSAPP_NUMBER)
+
+  if (!apiKey || !phoneNumberId || !recipient) {
+    console.warn('[kapso] not configured — skipping document')
+    return { skipped: true }
+  }
+
+  const document = {
+    link: url,
+    filename: filename || 'documento.pdf',
+  }
+  if (caption) document.caption = caption
+
+  const res = await fetch(`${KAPSO_API_BASE}/${phoneNumberId}/messages`, {
+    method: 'POST',
+    headers: {
+      'X-API-Key': apiKey,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: recipient,
+      type: 'document',
+      document,
+    }),
+  })
+
+  const json = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    console.error('[kapso] document error', res.status, json)
+    throw new Error(json?.error?.message || json?.message || 'kapso_document_failed')
+  }
+
+  return json
+}
+
 async function notifyAdmin(body) {
   if (!isConfigured()) return { skipped: true }
   try {
@@ -99,5 +139,6 @@ module.exports = {
   isConfigured,
   sendText,
   sendTemplate,
+  sendDocument,
   notifyAdmin,
 }

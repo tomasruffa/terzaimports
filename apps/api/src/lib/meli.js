@@ -155,6 +155,31 @@ async function meliFetch(path, options = {}, meliUserId) {
   return json
 }
 
+async function meliFetchBinary(path, options = {}, meliUserId) {
+  const { accessToken } = await getValidAccessToken(meliUserId)
+  const url = path.startsWith('http') ? path : `${MELI_API_URL}${path}`
+
+  const res = await fetch(url, {
+    ...options,
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      ...(options.headers || {}),
+    },
+  })
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    const err = new Error(`Meli API ${res.status}`)
+    err.status = res.status
+    err.details = text
+    throw err
+  }
+
+  const buffer = Buffer.from(await res.arrayBuffer())
+  const contentType = res.headers.get('content-type') || 'application/octet-stream'
+  return { buffer, contentType }
+}
+
 module.exports = {
   MELI_API_URL,
   MELI_TOKEN_URL,
@@ -164,4 +189,5 @@ module.exports = {
   refreshAccessToken,
   refreshAllTokens,
   meliFetch,
+  meliFetchBinary,
 }

@@ -127,12 +127,15 @@ async function upsertItem(item, meliUserId, visits = {}) {
 }
 
 async function upsertOrder(order, meliUserId, { deductStock = false } = {}) {
+  const shippingId = order.shipping?.id ?? null
+  const packId = order.pack_id ?? order.id
+
   await query(
     `INSERT INTO meli_orders (
        meli_order_id, meli_user_id, status, status_detail, buyer_id, buyer_nickname,
-       total_amount, paid_amount, currency_id, shipping_status,
+       total_amount, paid_amount, currency_id, shipping_status, shipping_id, pack_id,
        date_created, date_closed, raw, synced_at
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NOW())
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,NOW())
      ON CONFLICT (meli_order_id) DO UPDATE SET
        status = EXCLUDED.status,
        status_detail = EXCLUDED.status_detail,
@@ -142,6 +145,8 @@ async function upsertOrder(order, meliUserId, { deductStock = false } = {}) {
        paid_amount = EXCLUDED.paid_amount,
        currency_id = EXCLUDED.currency_id,
        shipping_status = EXCLUDED.shipping_status,
+       shipping_id = EXCLUDED.shipping_id,
+       pack_id = EXCLUDED.pack_id,
        date_created = EXCLUDED.date_created,
        date_closed = EXCLUDED.date_closed,
        raw = EXCLUDED.raw,
@@ -157,6 +162,8 @@ async function upsertOrder(order, meliUserId, { deductStock = false } = {}) {
       Number(order.paid_amount) || 0,
       order.currency_id ?? null,
       order.shipping?.status ?? null,
+      shippingId,
+      packId,
       order.date_created ?? null,
       order.date_closed ?? null,
       toJson(order),
@@ -187,6 +194,13 @@ async function upsertOrder(order, meliUserId, { deductStock = false } = {}) {
     await upsertSaleFromMeliOrder(order, meliUserId, { deductStock })
   } catch (err) {
     console.error('[meli] sale sync order', order.id, err.message)
+  }
+
+  if (order.status === 'paid' || order.status === 'confirmed') {
+    const { syncMeliOrderDocuments } = require('./meli-documents')
+    syncMeliOrderDocuments(order.id, meliUserId).catch((err) =>
+      console.warn('[meli] document sync failed', order.id, err.message)
+    )
   }
 }
 

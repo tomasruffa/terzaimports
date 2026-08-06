@@ -55,4 +55,17 @@ async function uploadProductImage(file, sku) {
   return getPublicUrl(key)
 }
 
-module.exports = { getS3Client, uploadProductImage, getPublicUrl }
+async function uploadBuffer(key, buffer, contentType = 'application/octet-stream') {
+  await getS3Client().send(
+    new PutObjectCommand({
+      Bucket: process.env.S3_BUCKET,
+      Key: key,
+      Body: buffer,
+      ContentType: contentType,
+    })
+  )
+
+  return getPublicUrl(key)
+}
+
+module.exports = { getS3Client, uploadProductImage, uploadBuffer, getPublicUrl }

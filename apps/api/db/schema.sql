@@ -301,6 +301,17 @@ CREATE INDEX IF NOT EXISTS idx_sale_items_sale ON sale_items(sale_id);
 CREATE INDEX IF NOT EXISTS idx_sale_items_product ON sale_items(product_id);
 
 ALTER TABLE meli_orders ADD COLUMN IF NOT EXISTS sale_id UUID REFERENCES sales(id) ON DELETE SET NULL;
+ALTER TABLE meli_orders ADD COLUMN IF NOT EXISTS shipping_id BIGINT;
+ALTER TABLE meli_orders ADD COLUMN IF NOT EXISTS pack_id BIGINT;
+ALTER TABLE meli_orders ADD COLUMN IF NOT EXISTS label_storage_key VARCHAR(500);
+ALTER TABLE meli_orders ADD COLUMN IF NOT EXISTS label_synced_at TIMESTAMPTZ;
+ALTER TABLE meli_orders ADD COLUMN IF NOT EXISTS invoice_storage_key VARCHAR(500);
+ALTER TABLE meli_orders ADD COLUMN IF NOT EXISTS invoice_synced_at TIMESTAMPTZ;
+ALTER TABLE meli_orders ADD COLUMN IF NOT EXISTS invoice_document_id VARCHAR(255);
+ALTER TABLE meli_orders ADD COLUMN IF NOT EXISTS billing_storage_key VARCHAR(500);
+ALTER TABLE meli_orders ADD COLUMN IF NOT EXISTS billing_synced_at TIMESTAMPTZ;
+ALTER TABLE meli_orders ADD COLUMN IF NOT EXISTS billing_document_id BIGINT;
+ALTER TABLE meli_orders ADD COLUMN IF NOT EXISTS billing_file_id VARCHAR(255);
 ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS sale_id UUID REFERENCES sales(id) ON DELETE SET NULL;
 ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS channel VARCHAR(30);
 ALTER TABLE sales ADD COLUMN IF NOT EXISTS kapso_notified_at TIMESTAMPTZ;

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Plus, ShoppingCart } from 'lucide-react'
+import { FileText, Plus, Printer, ShoppingCart } from 'lucide-react'
 import { apiFetch } from '@/utils/apiFetch'
 import SaleModal from '@/components/dashboard/SaleModal'
 
@@ -9,6 +9,17 @@ interface SaleItem {
   description: string
   quantity: number
   unit_price: number
+}
+
+interface SaleDocuments {
+  meli_order_id: number | null
+  shipping_status: string | null
+  has_invoice: boolean
+  has_billing: boolean
+  has_label: boolean
+  can_fetch_label: boolean
+  can_fetch_invoice: boolean
+  can_fetch_billing: boolean
 }
 
 interface Sale {
@@ -22,6 +33,7 @@ interface Sale {
   sale_date: string
   notes: string | null
   items: SaleItem[]
+  documents?: SaleDocuments
 }
 
 const channelMeta: Record<string, { label: string; className: string }> = {
@@ -29,6 +41,15 @@ const channelMeta: Record<string, { label: string; className: string }> = {
   whatsapp: { label: 'WhatsApp', className: 'bg-green-500/15 text-green-400' },
   facebook: { label: 'Facebook', className: 'bg-blue-500/15 text-blue-400' },
   presencial: { label: 'Presencial', className: 'bg-purple-500/15 text-purple-400' },
+}
+
+const shippingLabels: Record<string, string> = {
+  pending: 'Pendiente',
+  ready_to_ship: 'Listo para enviar',
+  handling: 'En preparación',
+  shipped: 'Enviado',
+  delivered: 'Entregado',
+  not_delivered: 'No entregado',
 }
 
 function formatMoney(value: number) {
@@ -41,6 +62,18 @@ function formatDate(value: string) {
   })
 }
 
+async function openSalePdf(saleId: string, type: 'label' | 'invoice' | 'billing') {
+  const res = await apiFetch(`/api/sales/${saleId}/${type}`)
+  if (!res.ok) {
+    const json = await res.json().catch(() => ({}))
+    alert(json.error || 'No se pudo obtener el documento')
+    return
+  }
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
+  window.open(url, '_blank')
+}
+
 export default function SalesPage() {
   const [sales, setSales] = useState<Sale[]>([])
   const [dashboard, setDashboard] = useState<{
@@ -50,6 +83,7 @@ export default function SalesPage() {
   const [loading, setLoading] = useState(true)
   const [modalOpen, setModalOpen] = useState(false)
   const [filter, setFilter] = useState<string>('')
+  const [syncingId, setSyncingId] = useState<string | null>(null)
 
   const load = async () => {
     setLoading(true)
@@ -66,6 +100,18 @@ export default function SalesPage() {
       setSales([])
     } finally {
       setLoading(false)
+    }
+  }
+
+  const syncDocuments = async (saleId: string) => {
+    setSyncingId(saleId)
+    try {
+      await apiFetch(`/api/sales/${saleId}/sync-documents`, { method: 'POST' })
+      await load()
+    } catch {
+      alert('No se pudieron sincronizar los documentos')
+    } finally {
+      setSyncingId(null)
     }
   }
 
@@ -129,28 +175,96 @@ export default function SalesPage() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-terza-gray-dark/30">
-                {['Fecha', 'Canal', 'Cliente', 'Ítems', 'Total', 'Estado'].map((h) => (
+                {['Fecha', 'Canal', 'Cliente', 'Ítems', 'Total', 'Envío', 'Documentos', 'Estado'].map((h) => (
                   <th key={h} className="text-left text-terza-gray text-xs uppercase tracking-wider px-4 py-3">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {sales.map((sale) => (
-                <tr key={sale.id} className="border-b border-terza-gray-dark/20 hover:bg-terza-navy-medium/30">
-                  <td className="px-4 py-3 text-terza-gray text-sm">{formatDate(sale.sale_date)}</td>
-                  <td className="px-4 py-3">
-                    <span className={`text-xs px-2 py-1 rounded-full ${channelMeta[sale.channel]?.className ?? ''}`}>
-                      {channelMeta[sale.channel]?.label ?? sale.channel}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-white text-sm">{sale.customer_name || sale.customer_contact || '—'}</td>
-                  <td className="px-4 py-3 text-terza-gray text-sm max-w-xs truncate">
-                    {(sale.items || []).map((i) => i.description).join(', ') || '—'}
-                  </td>
-                  <td className="px-4 py-3 text-green-400 text-sm font-medium">{formatMoney(Number(sale.total_amount))}</td>
-                  <td className="px-4 py-3 text-terza-gray text-sm">{sale.status}</td>
-                </tr>
-              ))}
+              {sales.map((sale) => {
+                const docs = sale.documents
+                const shippingLabel = docs?.shipping_status
+                  ? shippingLabels[docs.shipping_status] ?? docs.shipping_status
+                  : '—'
+
+                return (
+                  <tr key={sale.id} className="border-b border-terza-gray-dark/20 hover:bg-terza-navy-medium/30">
+                    <td className="px-4 py-3 text-terza-gray text-sm">{formatDate(sale.sale_date)}</td>
+                    <td className="px-4 py-3">
+                      <span className={`text-xs px-2 py-1 rounded-full ${channelMeta[sale.channel]?.className ?? ''}`}>
+                        {channelMeta[sale.channel]?.label ?? sale.channel}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-white text-sm">{sale.customer_name || sale.customer_contact || '—'}</td>
+                    <td className="px-4 py-3 text-terza-gray text-sm max-w-xs truncate">
+                      {(sale.items || []).map((i) => i.description).join(', ') || '—'}
+                    </td>
+                    <td className="px-4 py-3 text-green-400 text-sm font-medium">{formatMoney(Number(sale.total_amount))}</td>
+                    <td className="px-4 py-3 text-terza-gray text-sm">{shippingLabel}</td>
+                    <td className="px-4 py-3">
+                      {sale.channel === 'mercadolibre' && docs ? (
+                        <div className="flex flex-wrap gap-2">
+                          {(docs.has_invoice || docs.can_fetch_invoice) && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (!docs.has_invoice) syncDocuments(sale.id).then(() => openSalePdf(sale.id, 'invoice'))
+                                else openSalePdf(sale.id, 'invoice')
+                              }}
+                              disabled={syncingId === sale.id}
+                              className="flex items-center gap-1 text-xs px-2 py-1 rounded bg-terza-navy-medium text-terza-gray hover:text-white transition-colors"
+                            >
+                              <FileText size={12} />
+                              Factura venta
+                            </button>
+                          )}
+                          {(docs.has_billing || docs.can_fetch_billing) && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (!docs.has_billing) syncDocuments(sale.id).then(() => openSalePdf(sale.id, 'billing'))
+                                else openSalePdf(sale.id, 'billing')
+                              }}
+                              disabled={syncingId === sale.id}
+                              className="flex items-center gap-1 text-xs px-2 py-1 rounded bg-terza-navy-medium text-terza-gray hover:text-white transition-colors"
+                            >
+                              <FileText size={12} />
+                              Factura ML
+                            </button>
+                          )}
+                          {docs.can_fetch_label && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (!docs.has_label) syncDocuments(sale.id).then(() => openSalePdf(sale.id, 'label'))
+                                else openSalePdf(sale.id, 'label')
+                              }}
+                              disabled={syncingId === sale.id}
+                              className="flex items-center gap-1 text-xs px-2 py-1 rounded bg-terza-blue/20 text-terza-blue-bright hover:bg-terza-blue/30 transition-colors"
+                            >
+                              <Printer size={12} />
+                              Etiqueta
+                            </button>
+                          )}
+                          {!docs.has_invoice && !docs.has_billing && !docs.can_fetch_label && (
+                            <button
+                              type="button"
+                              onClick={() => syncDocuments(sale.id)}
+                              disabled={syncingId === sale.id}
+                              className="text-xs text-terza-gray hover:text-white"
+                            >
+                              {syncingId === sale.id ? 'Sincronizando…' : 'Buscar docs'}
+                            </button>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-terza-gray text-xs">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-terza-gray text-sm">{sale.status}</td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
           {sales.length === 0 && (

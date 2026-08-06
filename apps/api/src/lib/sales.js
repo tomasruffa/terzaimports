@@ -1,6 +1,8 @@
 const { getPool } = require('./db')
-const { notifyAdmin } = require('./kapso')
+const { notifyAdmin, sendDocument } = require('./kapso')
+const { getTokenRow } = require('./meli')
 const { maybeNotifyLowStock, syncStockToMeli } = require('./meli-sync')
+const { syncMeliOrderDocuments, getSaleDocumentsInfo } = require('./meli-documents')
 
 const SALES_CHANNELS = ['mercadolibre', 'whatsapp', 'facebook', 'presencial']
 
@@ -73,8 +75,56 @@ async function notifySaleIfNeeded(saleId, { force = false } = {}) {
   if (!sale || sale.status !== 'completed') return { skipped: true, reason: 'not_completed' }
   if (!force && sale.kapso_notified_at) return { skipped: true, reason: 'already_notified' }
 
+  if (sale.channel === 'mercadolibre' && sale.external_id) {
+    try {
+      const tokenRow = await getTokenRow()
+      if (tokenRow) {
+        await syncMeliOrderDocuments(Number(sale.external_id), tokenRow.meli_user_id)
+      }
+    } catch (err) {
+      console.warn('[sales] document sync before notify failed', saleId, err.message)
+    }
+  }
+
   const result = await notifyAdmin(formatSaleNotificationMessage(sale, sale.items))
   if (result?.error || result?.skipped) return result
+
+  const docs = await getSaleDocumentsInfo(saleId)
+  if (docs?.has_label && docs.label_url && docs.can_fetch_label) {
+    try {
+      await sendDocument({
+        url: docs.label_url,
+        filename: `etiqueta-ml-${docs.meli_order_id}.pdf`,
+        caption: '📦 Etiqueta de envío para imprimir',
+      })
+    } catch (err) {
+      console.error('[sales] kapso label document failed', saleId, err.message)
+    }
+  }
+
+  if (docs?.has_invoice && docs.invoice_url) {
+    try {
+      await sendDocument({
+        url: docs.invoice_url,
+        filename: `factura-ml-${docs.meli_order_id}.pdf`,
+        caption: '🧾 Factura de venta',
+      })
+    } catch (err) {
+      console.error('[sales] kapso invoice document failed', saleId, err.message)
+    }
+  }
+
+  if (docs?.has_billing && docs.billing_url) {
+    try {
+      await sendDocument({
+        url: docs.billing_url,
+        filename: `factura-comision-ml-${docs.meli_order_id}.pdf`,
+        caption: '📄 Factura de comisiones ML',
+      })
+    } catch (err) {
+      console.error('[sales] kapso billing document failed', saleId, err.message)
+    }
+  }
 
   await getPool().query('UPDATE sales SET kapso_notified_at = NOW() WHERE id = $1', [saleId])
   return result
