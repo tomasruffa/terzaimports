@@ -86,11 +86,22 @@ async function notifySaleIfNeeded(saleId, { force = false } = {}) {
     }
   }
 
-  const result = await notifyAdmin(formatSaleNotificationMessage(sale, sale.items))
+  const result = await notifyAdmin(formatSaleNotificationMessage(sale, sale.items), {
+    templateFallback: {
+      name: process.env.KAPSO_SALE_TEMPLATE || 'terza_nueva_venta',
+      bodyParams: [
+        CHANNEL_LABELS[sale.channel] || sale.channel,
+        sale.customer_name || sale.customer_contact || '—',
+        formatMoney(sale.total_amount, sale.currency_id),
+      ],
+    },
+  })
   if (result?.error || result?.skipped) return result
 
+  const canSendMedia = Boolean(result?.delivered)
+
   const docs = await getSaleDocumentsInfo(saleId)
-  if (docs?.has_label && docs.label_url && docs.can_fetch_label) {
+  if (canSendMedia && docs?.has_label && docs.label_url && docs.can_fetch_label) {
     try {
       await sendDocument({
         url: docs.label_url,
@@ -102,7 +113,7 @@ async function notifySaleIfNeeded(saleId, { force = false } = {}) {
     }
   }
 
-  if (docs?.has_invoice && docs.invoice_url) {
+  if (canSendMedia && docs?.has_invoice && docs.invoice_url) {
     try {
       await sendDocument({
         url: docs.invoice_url,
@@ -114,7 +125,7 @@ async function notifySaleIfNeeded(saleId, { force = false } = {}) {
     }
   }
 
-  if (docs?.has_billing && docs.billing_url) {
+  if (canSendMedia && docs?.has_billing && docs.billing_url) {
     try {
       await sendDocument({
         url: docs.billing_url,
@@ -127,7 +138,7 @@ async function notifySaleIfNeeded(saleId, { force = false } = {}) {
   }
 
   await getPool().query('UPDATE sales SET kapso_notified_at = NOW() WHERE id = $1', [saleId])
-  return result
+  return { ...result, documents_sent: canSendMedia }
 }
 
 async function notifySaleCreated(sale, items = []) {

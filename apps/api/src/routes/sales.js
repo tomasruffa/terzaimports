@@ -152,7 +152,7 @@ router.post('/notify-latest', async (req, res) => {
       return res.status(422).json({
         ok: false,
         error: result.error,
-        hint: 'Enviá cualquier mensaje al WhatsApp de Terza (+1 207-670-1813) para abrir la ventana de 24h, o creá un template aprobado en Kapso.',
+        hint: 'Mandá un mensaje al WhatsApp de Terza (+1 207-670-1813) para abrir la ventana de 24h, o esperá a que Meta apruebe el template terza_nueva_venta en Kapso.',
       })
     }
 
