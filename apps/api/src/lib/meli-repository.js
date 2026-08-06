@@ -1,7 +1,7 @@
 const { query } = require('./db')
 const { upsertSaleFromMeliOrder } = require('./sales')
 const { normalizeSku } = require('./product-consolidation')
-const { extractSellerSkuFromMeliItem } = require('./meli-sync')
+const { extractSellerSkuFromMeliItem, getMeliItemImageUrl } = require('./meli-sync')
 
 function toJson(value) {
   return value ? JSON.stringify(value) : null
@@ -96,7 +96,7 @@ async function upsertItem(item, meliUserId, visits = {}) {
       item.listing_type_id ?? null,
       item.condition ?? null,
       item.permalink ?? null,
-      item.thumbnail ?? item.secure_thumbnail ?? null,
+      getMeliItemImageUrl(item),
       item.health != null ? Number(item.health) : null,
       Number(visits.total) || 0,
       Number(visits.last30d) || 0,

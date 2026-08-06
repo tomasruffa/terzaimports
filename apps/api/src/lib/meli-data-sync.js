@@ -1,3 +1,4 @@
+const { query } = require('./db')
 const { meliFetch } = require('./meli')
 const {
   upsertAccount,
@@ -12,9 +13,10 @@ const {
 } = require('./meli-repository')
 const { syncItemFromMeli, reconcileStockFromMeliItems } = require('./meli-sync')
 const { backfillMeliSales } = require('./sales')
-const { consolidateDuplicateProducts } = require('./product-consolidation')
+const { consolidateDuplicateProducts, cleanupOrphanProducts } = require('./product-consolidation')
 
 const ITEM_STATUSES = ['active', 'paused', 'under_review', 'closed']
+const CATALOG_STATUSES = ['active', 'paused', 'under_review']
 const ORDERS_LOOKBACK_DAYS = 90
 
 function formatDate(date) {
@@ -27,10 +29,10 @@ function daysAgo(days) {
   return d
 }
 
-async function fetchAllItemIds(meliUserId) {
+async function fetchAllItemIds(meliUserId, statuses = ITEM_STATUSES) {
   const ids = new Set()
 
-  for (const status of ITEM_STATUSES) {
+  for (const status of statuses) {
     let offset = 0
     const limit = 50
 
@@ -49,6 +51,74 @@ async function fetchAllItemIds(meliUserId) {
   }
 
   return [...ids]
+}
+
+/**
+ * Fuente de verdad: catálogo actual en MercadoLibre.
+ * - Upsert de todos los items que devuelve la API (active + paused + under_review)
+ * - Imagen real desde pictures[0] de ML
+ * - Elimina meli_items que ya no están en ML
+ * - Actualiza image_url de products desde ML
+ */
+async function reconcileMeliCatalogFromApi(meliUserId) {
+  const userId = meliUserId || (await meliFetch('/users/me')).id
+  const apiIds = await fetchAllItemIds(userId, CATALOG_STATUSES)
+  const synced = []
+  const linked = []
+  const skipped = []
+  const errors = []
+
+  for (const itemId of apiIds) {
+    try {
+      const item = await meliFetch(`/items/${itemId}`, {}, userId)
+      await upsertItem(item, userId)
+      const productResult = await syncItemFromMeli(itemId, userId)
+      if (productResult?.skipped) {
+        skipped.push({ itemId, reason: productResult.reason })
+      } else if (productResult?.product) {
+        linked.push(itemId)
+      }
+      synced.push(itemId)
+    } catch (err) {
+      errors.push({ itemId, error: err.message })
+    }
+  }
+
+  const { rows: stale } = await query(
+    `SELECT meli_item_id FROM meli_items
+     WHERE meli_item_id <> ALL($1::text[])`,
+    [apiIds]
+  )
+  const removedIds = stale.map((r) => r.meli_item_id)
+  if (removedIds.length) {
+    await query('DELETE FROM meli_items WHERE meli_item_id = ANY($1::text[])', [removedIds])
+  }
+
+  const { rowCount: imagesUpdated } = await query(
+    `UPDATE products p
+     SET image_url = sub.img, updated_at = NOW()
+     FROM (
+       SELECT DISTINCT ON (product_id) product_id, thumbnail AS img
+       FROM meli_items
+       WHERE product_id IS NOT NULL AND thumbnail IS NOT NULL
+       ORDER BY product_id, (status = 'active') DESC, synced_at DESC
+     ) sub
+     WHERE p.id = sub.product_id`
+  )
+
+  const cleanup = await cleanupOrphanProducts()
+
+  return {
+    api_total: apiIds.length,
+    synced: synced.length,
+    linked: linked.length,
+    skipped: skipped.length,
+    removed: removedIds.length,
+    removed_ids: removedIds,
+    images_updated: imagesUpdated,
+    cleanup,
+    errors,
+  }
 }
 
 async function fetchItemVisits(itemIds, meliUserId) {
@@ -299,6 +369,8 @@ async function syncQuestionById(questionId, meliUserId) {
 
 module.exports = {
   runFullSync,
+  reconcileMeliCatalogFromApi,
+  fetchAllItemIds,
   syncMetricsSnapshot,
   getMetricsSummary,
   syncOrders,

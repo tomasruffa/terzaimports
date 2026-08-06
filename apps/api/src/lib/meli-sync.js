@@ -27,6 +27,15 @@ function extractSellerSkuFromMeliItem(item) {
   return normalizeSku(raw)
 }
 
+/** Mejor URL de imagen desde ML (foto principal, HTTPS). */
+function getMeliItemImageUrl(item) {
+  const pic = item.pictures?.[0]?.secure_url || item.pictures?.[0]?.url
+  const thumb = item.secure_thumbnail || item.thumbnail
+  const url = pic || thumb || null
+  if (!url) return null
+  return url.replace(/^http:\/\//i, 'https://')
+}
+
 function meliSkuFromItem(item) {
   const extracted = extractSellerSkuFromMeliItem(item)
   if (extracted) return extracted
@@ -49,7 +58,7 @@ function mapMeliItemToProduct(item) {
     stock_quantity: Number(item.available_quantity) || 0,
     min_stock: 5,
     unit: 'unidad',
-    image_url: item.thumbnail || item.pictures?.[0]?.secure_url || null,
+    image_url: getMeliItemImageUrl(item),
     meli_permalink: item.permalink || null,
     active: item.status === 'active',
   }
@@ -365,4 +374,5 @@ module.exports = {
   maybeNotifyLowStock,
   meliSkuFromItem,
   extractSellerSkuFromMeliItem,
+  getMeliItemImageUrl,
 }
