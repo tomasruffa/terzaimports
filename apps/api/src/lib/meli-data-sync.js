@@ -11,7 +11,7 @@ const {
   finishSyncRun,
   getMetricsSummary,
 } = require('./meli-repository')
-const { syncItemFromMeli, reconcileStockFromMeliItems } = require('./meli-sync')
+const { syncItemFromMeli, reconcileStockFromMeliItems, isMarketplaceListing } = require('./meli-sync')
 const { backfillMeliSales } = require('./sales')
 const { consolidateDuplicateProducts, cleanupOrphanProducts } = require('./product-consolidation')
 
@@ -66,11 +66,18 @@ async function reconcileMeliCatalogFromApi(meliUserId) {
   const synced = []
   const linked = []
   const skipped = []
+  const mpExcluded = []
   const errors = []
 
   for (const itemId of apiIds) {
     try {
       const item = await meliFetch(`/items/${itemId}`, {}, userId)
+
+      if (!isMarketplaceListing(item)) {
+        mpExcluded.push(itemId)
+        continue
+      }
+
       await upsertItem(item, userId)
       const productResult = await syncItemFromMeli(itemId, userId)
       if (productResult?.skipped) {
@@ -86,8 +93,10 @@ async function reconcileMeliCatalogFromApi(meliUserId) {
 
   const { rows: stale } = await query(
     `SELECT meli_item_id FROM meli_items
-     WHERE meli_item_id <> ALL($1::text[])`,
-    [apiIds]
+     WHERE meli_item_id <> ALL($1::text[])
+        OR raw->>'domain_id' = 'MLA-MERCADO_PAGO'
+        OR category_id = 'MLA458068'`,
+    [synced]
   )
   const removedIds = stale.map((r) => r.meli_item_id)
   if (removedIds.length) {
@@ -110,6 +119,9 @@ async function reconcileMeliCatalogFromApi(meliUserId) {
 
   return {
     api_total: apiIds.length,
+    marketplace_total: synced.length,
+    mp_excluded: mpExcluded.length,
+    mp_excluded_ids: mpExcluded,
     synced: synced.length,
     linked: linked.length,
     skipped: skipped.length,

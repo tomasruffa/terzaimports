@@ -36,6 +36,16 @@ function getMeliItemImageUrl(item) {
   return url.replace(/^http:\/\//i, 'https://')
 }
 
+/** Publicación real de Mercado Libre (panel vendedor), no producto Mercado Pago / Point. */
+function isMarketplaceListing(item) {
+  if (!item) return false
+  if (item.domain_id === 'MLA-MERCADO_PAGO') return false
+  if (item.category_id === 'MLA458068') return false
+  const channels = item.channels || []
+  if (channels.length > 0 && !channels.includes('marketplace')) return false
+  return true
+}
+
 function meliSkuFromItem(item) {
   const extracted = extractSellerSkuFromMeliItem(item)
   if (extracted) return extracted
@@ -65,6 +75,10 @@ function mapMeliItemToProduct(item) {
 }
 
 async function upsertProductFromMeliItem(item) {
+  if (!isMarketplaceListing(item)) {
+    return { product: null, created: false, skipped: true, reason: 'not_marketplace_listing' }
+  }
+
   const stored = await query(
     'SELECT seller_sku, product_id FROM meli_items WHERE meli_item_id = $1',
     [item.id]
@@ -375,4 +389,5 @@ module.exports = {
   meliSkuFromItem,
   extractSellerSkuFromMeliItem,
   getMeliItemImageUrl,
+  isMarketplaceListing,
 }
