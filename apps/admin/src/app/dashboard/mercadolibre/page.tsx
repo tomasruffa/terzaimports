@@ -11,10 +11,11 @@ import {
   Star,
   AlertCircle,
   ExternalLink,
+  CreditCard,
 } from 'lucide-react'
 import { apiFetch } from '@/utils/apiFetch'
 
-type Tab = 'overview' | 'items' | 'orders' | 'questions'
+type Tab = 'overview' | 'items' | 'mercadopago' | 'orders' | 'questions'
 
 interface MeliAccount {
   meli_user_id: string
@@ -62,6 +63,7 @@ interface MeliItem {
   visits_total: number
   visits_last_30d: number
   permalink: string | null
+  thumbnail?: string | null
 }
 
 interface MeliOrder {
@@ -117,6 +119,7 @@ export default function MercadoLibrePage() {
   const [tab, setTab] = useState<Tab>('overview')
   const [metrics, setMetrics] = useState<MeliMetrics | null>(null)
   const [items, setItems] = useState<MeliItem[]>([])
+  const [mpItems, setMpItems] = useState<MeliItem[]>([])
   const [orders, setOrders] = useState<MeliOrder[]>([])
   const [questions, setQuestions] = useState<MeliQuestion[]>([])
   const [loading, setLoading] = useState(true)
@@ -133,9 +136,14 @@ export default function MercadoLibrePage() {
 
   const loadTabData = useCallback(async (currentTab: Tab) => {
     if (currentTab === 'items') {
-      const res = await apiFetch('/api/mercadolibre/items?limit=50')
+      const res = await apiFetch('/api/mercadolibre/items?limit=50&catalog=marketplace')
       const json = await res.json()
       if (res.ok) setItems(json.data || [])
+    }
+    if (currentTab === 'mercadopago') {
+      const res = await apiFetch('/api/mercadolibre/items?limit=50&catalog=mercadopago')
+      const json = await res.json()
+      if (res.ok) setMpItems(json.data || [])
     }
     if (currentTab === 'orders') {
       const res = await apiFetch('/api/mercadolibre/orders?limit=50')
@@ -195,6 +203,7 @@ export default function MercadoLibrePage() {
   const tabs: { id: Tab; label: string }[] = [
     { id: 'overview', label: 'Resumen' },
     { id: 'items', label: 'Publicaciones' },
+    { id: 'mercadopago', label: 'Mercado Pago' },
     { id: 'orders', label: 'Ventas' },
     { id: 'questions', label: 'Preguntas' },
   ]
@@ -362,7 +371,14 @@ export default function MercadoLibrePage() {
             <tbody>
               {items.map((item) => (
                 <tr key={item.meli_item_id} className="border-b border-terza-gray-dark/20 hover:bg-terza-navy-medium/30">
-                  <td className="px-4 py-3 text-white text-sm max-w-xs truncate">{item.title}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      {item.thumbnail && (
+                        <img src={item.thumbnail} alt="" className="w-10 h-10 rounded-lg object-cover bg-terza-navy" />
+                      )}
+                      <span className="text-white text-sm max-w-xs truncate">{item.title}</span>
+                    </div>
+                  </td>
                   <td className="px-4 py-3">
                     <span className={`text-xs px-2 py-1 rounded-full ${statusBadge(item.status)}`}>{item.status}</span>
                   </td>
@@ -382,6 +398,56 @@ export default function MercadoLibrePage() {
             </tbody>
           </table>
           {items.length === 0 && <p className="text-terza-gray text-sm p-6 text-center">No hay publicaciones sincronizadas</p>}
+        </div>
+      )}
+
+      {tab === 'mercadopago' && (
+        <div className="space-y-4">
+          <div className="card-dark border border-sky-500/20 bg-sky-500/5 flex items-start gap-3 text-sm">
+            <CreditCard size={18} className="text-sky-400 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-white font-medium">Productos de cobro Mercado Pago</p>
+              <p className="text-terza-gray text-xs mt-1">
+                Estos ítems no son publicaciones del catálogo ML. Se gestionan aparte y no se mezclan con el inventario Terza.
+              </p>
+            </div>
+          </div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {mpItems.map((item) => (
+              <div key={item.meli_item_id} className="card-dark !p-4 flex gap-3">
+                {item.thumbnail ? (
+                  <img src={item.thumbnail} alt="" className="w-16 h-16 rounded-xl object-cover bg-terza-navy shrink-0" />
+                ) : (
+                  <div className="w-16 h-16 rounded-xl bg-terza-navy flex items-center justify-center shrink-0">
+                    <CreditCard size={24} className="text-sky-400/50" />
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="text-white text-sm font-medium line-clamp-2">{item.title}</p>
+                  <p className="text-terza-gray/70 text-xs font-mono mt-1">
+                    {item.meli_item_id.replace('MLA', '#')}
+                  </p>
+                  <div className="flex items-center justify-between mt-2">
+                    <span className="text-white font-semibold text-sm">{formatMoney(item.price)}</span>
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${statusBadge(item.status)}`}>{item.status}</span>
+                  </div>
+                  {item.permalink && (
+                    <a
+                      href={item.permalink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sky-400 text-xs mt-2 inline-flex items-center gap-1 hover:text-white"
+                    >
+                      Ver en MP <ExternalLink size={12} />
+                    </a>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+          {mpItems.length === 0 && (
+            <p className="text-terza-gray text-sm text-center py-8">No hay productos Mercado Pago sincronizados</p>
+          )}
         </div>
       )}
 

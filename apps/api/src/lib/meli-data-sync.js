@@ -66,6 +66,7 @@ async function reconcileMeliCatalogFromApi(meliUserId) {
   const synced = []
   const linked = []
   const skipped = []
+  const mpSynced = []
   const mpExcluded = []
   const errors = []
 
@@ -74,6 +75,8 @@ async function reconcileMeliCatalogFromApi(meliUserId) {
       const item = await meliFetch(`/items/${itemId}`, {}, userId)
 
       if (!isMarketplaceListing(item)) {
+        await upsertItem(item, userId)
+        mpSynced.push(itemId)
         mpExcluded.push(itemId)
         continue
       }
@@ -91,12 +94,11 @@ async function reconcileMeliCatalogFromApi(meliUserId) {
     }
   }
 
+  const allKeptIds = [...synced, ...mpSynced]
   const { rows: stale } = await query(
     `SELECT meli_item_id FROM meli_items
-     WHERE meli_item_id <> ALL($1::text[])
-        OR raw->>'domain_id' = 'MLA-MERCADO_PAGO'
-        OR category_id = 'MLA458068'`,
-    [synced]
+     WHERE meli_item_id <> ALL($1::text[])`,
+    [allKeptIds.length ? allKeptIds : ['']]
   )
   const removedIds = stale.map((r) => r.meli_item_id)
   if (removedIds.length) {
@@ -122,6 +124,7 @@ async function reconcileMeliCatalogFromApi(meliUserId) {
     marketplace_total: synced.length,
     mp_excluded: mpExcluded.length,
     mp_excluded_ids: mpExcluded,
+    mp_synced: mpSynced.length,
     synced: synced.length,
     linked: linked.length,
     skipped: skipped.length,

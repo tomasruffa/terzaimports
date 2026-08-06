@@ -369,12 +369,19 @@ router.get('/items', requireAuth, async (req, res) => {
       return res.status(400).json({ ok: false, error: 'No hay cuenta de Mercado Libre vinculada' })
     }
 
-    const { status, page = 1, limit = 20 } = req.query
+    const { status, page = 1, limit = 20, catalog } = req.query
     const pageNum = Math.max(1, Number(page) || 1)
     const limitNum = Math.min(100, Math.max(1, Number(limit) || 20))
     const offset = (pageNum - 1) * limitNum
     const params = [tokenRow.meli_user_id]
     let where = 'WHERE meli_user_id = $1'
+
+    if (catalog === 'marketplace') {
+      where +=
+        " AND (raw->>'domain_id' IS NULL OR raw->>'domain_id' <> 'MLA-MERCADO_PAGO') AND category_id <> 'MLA458068'"
+    } else if (catalog === 'mercadopago') {
+      where += " AND (raw->>'domain_id' = 'MLA-MERCADO_PAGO' OR category_id = 'MLA458068')"
+    }
 
     if (status) {
       params.push(status)
